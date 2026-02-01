@@ -2,7 +2,8 @@ import json
 from pathlib import Path
 from typing import Final
 
-DOMAIN = "shipment_tracking"
+DOMAIN = "polish_shipment_tracking"
+LEGACY_DOMAIN = "shipment_tracking"
 PLATFORMS = ["sensor"]
 
 CONF_COURIER = "courier"
@@ -31,7 +32,7 @@ def _load_integration_version(manifest_path: Path) -> str:
 
 INTEGRATION_VERSION: Final[str] = _load_integration_version(_MANIFEST_PATH)
 
-URL_BASE: Final[str] = "/shipment-tracking"
+URL_BASE: Final[str] = "/polish-shipment-tracking"
 
 # List of JavaScript modules to register with Lovelace.
 JSMODULES: Final[list[dict[str, str]]] = [

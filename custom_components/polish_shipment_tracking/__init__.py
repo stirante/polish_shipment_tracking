@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+import logging
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, CoreState, EVENT_HOMEASSISTANT_STARTED
 from homeassistant.helpers import entity_registry as er
@@ -5,16 +9,19 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.components import websocket_api
 import voluptuous as vol
 
-from .const import DOMAIN, PLATFORMS, INTEGRATION_VERSION
+from .const import DOMAIN, LEGACY_DOMAIN, PLATFORMS, INTEGRATION_VERSION
 from .frontend import JSModuleRegistration
 from .coordinator import ShipmentCoordinator
 from .sensor import ShipmentSensor, _pick_pocztex_id, _pick_pocztex_status, _normalize_status
+
+_LOGGER = logging.getLogger(__name__)
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 async def async_setup(hass: HomeAssistant, config: dict):
     """Set up the Shipment Tracking integration and register frontend resources."""
     hass.data.setdefault(DOMAIN, {})
+    await _async_import_legacy_entries(hass)
 
     async def async_register_frontend(_event=None) -> None:
         """Register the JavaScript modules after Home Assistant startup."""
@@ -43,6 +50,80 @@ async def async_setup(hass: HomeAssistant, config: dict):
         hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, async_register_frontend)
 
     return True
+
+
+async def _async_import_legacy_entries(hass: HomeAssistant) -> None:
+    """Import legacy config entries from shipment_tracking domain."""
+    legacy_entries: list[ConfigEntry] = [
+        e for e in hass.config_entries.async_entries(LEGACY_DOMAIN)
+        if not e.disabled_by
+    ]
+
+    if not legacy_entries:
+        return
+
+    _LOGGER.warning(
+        "Found %d legacy '%s' config entries. Importing into '%s'...",
+        len(legacy_entries), LEGACY_DOMAIN, DOMAIN
+    )
+
+    existing_new = hass.config_entries.async_entries(DOMAIN)
+
+    # simple dedupe based on courier+phone+email
+    def _fingerprint(entry: ConfigEntry) -> tuple:
+        d = entry.data or {}
+        return (
+            d.get("courier"),
+            d.get("phone"),
+            d.get("email"),
+        )
+
+    existing_fps = {_fingerprint(e) for e in existing_new}
+
+    ent_reg = er.async_get(hass)
+
+    for legacy in legacy_entries:
+        fp = _fingerprint(legacy)
+        if fp in existing_fps:
+            _LOGGER.info("Legacy entry %s seems already imported (fp=%s). Skipping.", legacy.entry_id, fp)
+            continue
+
+        new_entry = hass.config_entries.async_add(
+            hass.config_entries.async_create_entry(
+                domain=DOMAIN,
+                title=legacy.title,
+                data=dict(legacy.data),
+                options=dict(legacy.options),
+            )
+        )
+
+        _LOGGER.info("Imported legacy entry %s -> new entry %s", legacy.entry_id, new_entry.entry_id)
+
+        await _async_retarget_entities(ent_reg, legacy.entry_id, new_entry.entry_id)
+
+        await hass.config_entries.async_remove(legacy.entry_id)
+        _LOGGER.warning("Removed legacy entry %s after import", legacy.entry_id)
+
+
+async def _async_retarget_entities(ent_reg: er.EntityRegistry, old_entry_id: str, new_entry_id: str) -> None:
+    """Keep entity_id/history by moving entities from old config_entry_id to new one."""
+    updates = 0
+    for entity_entry in list(ent_reg.entities.values()):
+        if entity_entry.config_entry_id != old_entry_id:
+            continue
+        # Move only entities from the legacy component
+        if entity_entry.platform != LEGACY_DOMAIN:
+            continue
+
+        ent_reg.async_update_entity(
+            entity_entry.entity_id,
+            platform=DOMAIN,
+            config_entry_id=new_entry_id,
+        )
+        updates += 1
+
+    if updates:
+        _LOGGER.info("Retargeted %d entities from legacy entry %s -> %s", updates, old_entry_id, new_entry_id)
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     coordinator = ShipmentCoordinator(hass, entry)
