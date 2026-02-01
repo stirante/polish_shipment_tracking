@@ -276,7 +276,7 @@ class ShipmentTrackingCard extends HTMLElement {
     const entitiesToShow = Object.keys(this._hass.states).filter((entityId) => {
       if (!entityId.startsWith("sensor.")) return false;
       const stateObj = this._hass.states[entityId];
-      return stateObj?.attributes?.integration_domain === "shipment_tracking";
+      return stateObj?.attributes?.integration_domain === "polish_shipment_tracking";
     });
 
     entitiesToShow.sort((a, b) => {
