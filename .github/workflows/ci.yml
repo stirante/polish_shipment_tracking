@@ -1,30 +1,11 @@
 name: CI
-
 on:
   push:
+    branches: [ main ] # Możesz ograniczyć do głównej gałęzi
+    tags-ignore: [ 'v*.*.*' ] # Ignoruj tagi tutaj, bo mają własny workflow
   pull_request:
   workflow_dispatch:
 
 jobs:
-  hassfest:
-    name: hassfest
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: hassfest
-        uses: home-assistant/actions/hassfest@master
-
-  hacs:
-    name: hacs
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: HACS validation
-        uses: hacs/action@main
-        with:
-          category: integration
-          ignore: brands
+  validate:
+    uses: ./.github/workflows/run-validation.yml
