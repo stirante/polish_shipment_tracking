@@ -2,7 +2,7 @@
 
 English version: [README_EN.md](README_EN.md)
 
-![Shipment Tracking card](images/screenshot.png)
+![Shipment Tracking card](screenshot.png)
 
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)

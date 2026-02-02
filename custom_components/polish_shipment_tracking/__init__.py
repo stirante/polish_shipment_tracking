@@ -11,17 +11,6 @@ import voluptuous as vol
 from .const import DOMAIN, PLATFORMS, INTEGRATION_VERSION
 from .frontend import JSModuleRegistration
 from .coordinator import ShipmentCoordinator
-<<<<<<< HEAD
-=======
-from .sensor import (
-    ShipmentSensor,
-    ActiveShipmentsSensor,
-    _pick_pocztex_id,
-    _pick_pocztex_status,
-    _normalize_status,
-    get_active_shipments_unique_id,
-)
->>>>>>> eab2013f176cb849baa1d59ca3db66b26f34f320
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -57,89 +46,6 @@ async def async_setup(hass: HomeAssistant, config: dict):
 
     return True
 
-<<<<<<< HEAD
-=======
-
-async def _async_import_legacy_entries(hass: HomeAssistant) -> None:
-    """Import legacy config entries from shipment_tracking domain."""
-    legacy_entries: list[ConfigEntry] = [
-        e for e in hass.config_entries.async_entries(LEGACY_DOMAIN)
-        if not e.disabled_by
-    ]
-
-    if not legacy_entries:
-        return
-
-    _LOGGER.warning(
-        "Found %d legacy '%s' config entries. Importing into '%s'...",
-        len(legacy_entries), LEGACY_DOMAIN, DOMAIN
-    )
-
-    existing_new = hass.config_entries.async_entries(DOMAIN)
-
-    # simple dedupe based on courier+phone+email
-    def _fingerprint(entry: ConfigEntry) -> tuple:
-        d = entry.data or {}
-        return (
-            d.get("courier"),
-            d.get("phone"),
-            d.get("email"),
-        )
-
-    existing_fps = {_fingerprint(e) for e in existing_new}
-
-    ent_reg = er.async_get(hass)
-
-    for legacy in legacy_entries:
-        fp = _fingerprint(legacy)
-        if fp in existing_fps:
-            _LOGGER.info("Legacy entry %s seems already imported (fp=%s). Skipping.", legacy.entry_id, fp)
-            continue
-
-        new_entry = hass.config_entries.async_add(
-            hass.config_entries.async_create_entry(
-                domain=DOMAIN,
-                title=legacy.title,
-                data=dict(legacy.data),
-                options=dict(legacy.options),
-            )
-        )
-
-        _LOGGER.info("Imported legacy entry %s -> new entry %s", legacy.entry_id, new_entry.entry_id)
-
-        await _async_retarget_entities(ent_reg, legacy.entry_id, new_entry.entry_id)
-
-        await hass.config_entries.async_remove(legacy.entry_id)
-        _LOGGER.warning("Removed legacy entry %s after import", legacy.entry_id)
-
-
-async def _async_retarget_entities(ent_reg: er.EntityRegistry, old_entry_id: str, new_entry_id: str) -> None:
-    """Keep entity_id/history by moving entities from old config_entry_id to new one."""
-    updates = 0
-    for entity_entry in list(ent_reg.entities.values()):
-        if entity_entry.config_entry_id != old_entry_id:
-            continue
-        # Move only entities from the legacy component
-        if entity_entry.platform != LEGACY_DOMAIN:
-            continue
-
-        ent_reg.async_update_entity(
-            entity_entry.entity_id,
-            platform=DOMAIN,
-            config_entry_id=new_entry_id,
-        )
-        updates += 1
-
-    if updates:
-        _LOGGER.info("Retargeted %d entities from legacy entry %s -> %s", updates, old_entry_id, new_entry_id)
-
-def _iter_coordinators(hass: HomeAssistant):
-    data = hass.data.get(DOMAIN, {})
-    for value in data.values():
-        if isinstance(value, ShipmentCoordinator):
-            yield value
-
->>>>>>> eab2013f176cb849baa1d59ca3db66b26f34f320
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Set up from a config entry."""
     coordinator = ShipmentCoordinator(hass, entry)
@@ -151,7 +57,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     
     return True
 
-<<<<<<< HEAD
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Unload a config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
@@ -162,131 +67,5 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
     # Actually, keep it for now as there might be other entries.
     # The original code did some logic here for global sensor.
     
-=======
-async def _update_entities(hass, entry, coordinator):
-    """Check for new parcels and add sensors."""
-    if not hasattr(coordinator, "known_parcels"):
-        coordinator.known_parcels = set()
-    
-    new_entities = []
-    current_data = coordinator.data or []
-    current_ids = set()
-    
-    for parcel in current_data:
-        pid = _get_parcel_id(parcel, coordinator.courier)
-        
-        if not pid:
-            continue
-
-        if _is_delivered(parcel, coordinator.courier):
-            continue
-
-        current_ids.add(pid)
-        if pid not in coordinator.known_parcels:
-            coordinator.known_parcels.add(pid)
-            new_entities.append(ShipmentSensor(coordinator, parcel, coordinator.courier))
-    
-    if new_entities and coordinator.add_entities_callback:
-        coordinator.add_entities_callback(new_entities)
-
-    # Remove entities that are no longer present in the API response.
-    current_unique_ids = {f"{coordinator.courier}_{pid}" for pid in current_ids}
-    current_unique_ids.add(get_active_shipments_unique_id())
-    registry = er.async_get(hass)
-    remove_entity_ids = []
-
-    for entity_entry in registry.entities.values():
-        if entity_entry.domain != "sensor":
-            continue
-        if entity_entry.platform != DOMAIN:
-            continue
-        if entity_entry.config_entry_id != entry.entry_id:
-            continue
-        if not entity_entry.unique_id:
-            continue
-        if entity_entry.unique_id not in current_unique_ids:
-            remove_entity_ids.append(entity_entry.entity_id)
-
-    if remove_entity_ids:
-        for entity_id in remove_entity_ids:
-            registry.async_remove(entity_id)
-
-    # Keep in sync with the latest parcel list.
-    coordinator.known_parcels.intersection_update(current_ids)
-
-def _get_parcel_id(data, courier):
-    if courier == "inpost": return data.get("shipmentNumber")
-    if courier == "dpd": return data.get("waybill")
-    if courier == "dhl": return data.get("shipmentNumber")
-    if courier == "pocztex": return _pick_pocztex_id(data)
-    return None
-
-def _is_delivered(data, courier):
-    status = ""
-    if courier == "inpost":
-        status = data.get("status") or ""
-    elif courier == "dpd":
-        status = (data.get("main_status") or {}).get("status") or ""
-    elif courier == "dhl":
-        status = data.get("status") or ""
-    elif courier == "pocztex":
-        status = _pick_pocztex_status(data) or ""
-
-    status_norm = str(status).strip().lower()
-    if not status_norm:
-        return False
-
-    delivered_markers = {
-        "delivered",
-        "delivered_to_pickup_point",
-        "delivered_to_boxmachine",
-        "delivered_to_address",
-        "delivered_to_machine",
-        "delivered_to_parcel_locker",
-        "delivered_to_shop",
-        "delivered_to_branch",
-    }
-    if status_norm in delivered_markers:
-        return True
-
-    if courier == "pocztex":
-        return _normalize_status(status, courier) == "delivered"
-
-    return "delivered" in status_norm
-
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
-    coordinator = hass.data.get(DOMAIN, {}).get(entry.entry_id)
-    global_sensor = hass.data.get(DOMAIN, {}).get("_active_shipments_sensor")
-    if global_sensor and coordinator:
-        global_sensor.detach_coordinator(coordinator)
-
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if unload_ok:
-        hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
-        remaining_coordinators = list(_iter_coordinators(hass))
-        if not remaining_coordinators:
-            hass.data.get(DOMAIN, {}).pop("_active_shipments_sensor", None)
-            if not hass.data.get(DOMAIN):
-                await JSModuleRegistration(hass).async_unregister()
-        else:
-            registry = er.async_get(hass)
-            entity_id = registry.async_get_entity_id(
-                "sensor",
-                DOMAIN,
-                get_active_shipments_unique_id(),
-            )
-            if not entity_id:
-                new_sensor = ActiveShipmentsSensor(hass)
-                hass.data[DOMAIN]["_active_shipments_sensor"] = new_sensor
-                add_entities = None
-                for remaining in remaining_coordinators:
-                    add_entities = getattr(remaining, "add_entities_callback", None)
-                    if add_entities:
-                        break
-                if add_entities:
-                    add_entities([new_sensor])
-                    for remaining in remaining_coordinators:
-                        new_sensor.attach_coordinator(remaining)
->>>>>>> eab2013f176cb849baa1d59ca3db66b26f34f320
     return unload_ok
 
