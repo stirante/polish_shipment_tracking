@@ -204,8 +204,13 @@ class ShipmentCoordinator(DataUpdateCoordinator):
                     if isinstance(details, Exception):
                         enriched.append(parcel)
                         continue
-                    if isinstance(details, dict) and isinstance(parcel, dict):
-                        enriched.append({**parcel, **details})
+
+                    if isinstance(parcel, dict):
+                        merged = dict(parcel)
+                        if isinstance(details, dict):
+                            merged.update(details)
+                        merged["_raw_response"] = details
+                        enriched.append(merged)
                     else:
                         enriched.append(parcel)
                 return enriched

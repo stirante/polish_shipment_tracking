@@ -12,7 +12,14 @@ import voluptuous as vol
 from .const import DOMAIN, LEGACY_DOMAIN, PLATFORMS, INTEGRATION_VERSION
 from .frontend import JSModuleRegistration
 from .coordinator import ShipmentCoordinator
-from .sensor import ShipmentSensor, _pick_pocztex_id, _pick_pocztex_status, _normalize_status
+from .sensor import (
+    ShipmentSensor,
+    ActiveShipmentsSensor,
+    _pick_pocztex_id,
+    _pick_pocztex_status,
+    _normalize_status,
+    get_active_shipments_unique_id,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -125,6 +132,12 @@ async def _async_retarget_entities(ent_reg: er.EntityRegistry, old_entry_id: str
     if updates:
         _LOGGER.info("Retargeted %d entities from legacy entry %s -> %s", updates, old_entry_id, new_entry_id)
 
+def _iter_coordinators(hass: HomeAssistant):
+    data = hass.data.get(DOMAIN, {})
+    for value in data.values():
+        if isinstance(value, ShipmentCoordinator):
+            yield value
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     coordinator = ShipmentCoordinator(hass, entry)
     await coordinator.async_config_entry_first_refresh()
@@ -172,6 +185,7 @@ async def _update_entities(hass, entry, coordinator):
 
     # Remove entities that are no longer present in the API response.
     current_unique_ids = {f"{coordinator.courier}_{pid}" for pid in current_ids}
+    current_unique_ids.add(get_active_shipments_unique_id())
     registry = er.async_get(hass)
     remove_entity_ids = []
 
@@ -235,9 +249,36 @@ def _is_delivered(data, courier):
     return "delivered" in status_norm
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
+    coordinator = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+    global_sensor = hass.data.get(DOMAIN, {}).get("_active_shipments_sensor")
+    if global_sensor and coordinator:
+        global_sensor.detach_coordinator(coordinator)
+
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
-        if not hass.data.get(DOMAIN):
-            await JSModuleRegistration(hass).async_unregister()
+        remaining_coordinators = list(_iter_coordinators(hass))
+        if not remaining_coordinators:
+            hass.data.get(DOMAIN, {}).pop("_active_shipments_sensor", None)
+            if not hass.data.get(DOMAIN):
+                await JSModuleRegistration(hass).async_unregister()
+        else:
+            registry = er.async_get(hass)
+            entity_id = registry.async_get_entity_id(
+                "sensor",
+                DOMAIN,
+                get_active_shipments_unique_id(),
+            )
+            if not entity_id:
+                new_sensor = ActiveShipmentsSensor(hass)
+                hass.data[DOMAIN]["_active_shipments_sensor"] = new_sensor
+                add_entities = None
+                for remaining in remaining_coordinators:
+                    add_entities = getattr(remaining, "add_entities_callback", None)
+                    if add_entities:
+                        break
+                if add_entities:
+                    add_entities([new_sensor])
+                    for remaining in remaining_coordinators:
+                        new_sensor.attach_coordinator(remaining)
     return unload_ok

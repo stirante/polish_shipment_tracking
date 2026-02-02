@@ -16,7 +16,11 @@ _LABEL_TRANSLATIONS = {
     "parcel": {
         "pl": "Paczka",
         "en": "Parcel",
-    }
+    },
+    "active_shipments": {
+        "pl": "Aktywne przesyłki",
+        "en": "Active shipments",
+    },
 }
 
 _STATUS_MAP = {
@@ -154,6 +158,10 @@ _STATUS_MAP = {
         "P_OWU": "delivered",
     },
 }
+
+_FINAL_STATUS_KEYS = {"delivered", "returned", "cancelled"}
+ACTIVE_SHIPMENTS_OBJECT_ID = f"{DOMAIN}_active_shipments"
+ACTIVE_SHIPMENTS_UNIQUE_ID = ACTIVE_SHIPMENTS_OBJECT_ID
 
 _SHARED_STATUS_FALLBACK = {
     "pl": {
@@ -346,6 +354,28 @@ def _normalize_status(raw_status, courier):
 
     return "unknown"
 
+def _ensure_json_payload(payload):
+    try:
+        return json.dumps(payload, ensure_ascii=False)
+    except (TypeError, ValueError):
+        return json.dumps(payload, ensure_ascii=False, default=str)
+
+def _is_active_status(raw_status, courier):
+    return _normalize_status(raw_status, courier) not in _FINAL_STATUS_KEYS
+
+def _count_active_parcels(parcels, courier):
+    if not parcels:
+        return 0
+    count = 0
+    for parcel in parcels:
+        raw_status = _get_raw_status(parcel, courier)
+        if _is_active_status(raw_status, courier):
+            count += 1
+    return count
+
+def get_active_shipments_unique_id():
+    return ACTIVE_SHIPMENTS_UNIQUE_ID
+
 
 def _translate_status(raw_status, courier, language):
     status_text = str(raw_status or "").strip()
@@ -429,7 +459,14 @@ async def async_setup_entry(hass, entry, async_add_entities):
     coordinator = hass.data[DOMAIN][entry.entry_id]
     
     coordinator.add_entities_callback = async_add_entities
-    
+
+    global_sensor = hass.data[DOMAIN].get("_active_shipments_sensor")
+    if not global_sensor:
+        global_sensor = ActiveShipmentsSensor(hass)
+        hass.data[DOMAIN]["_active_shipments_sensor"] = global_sensor
+        async_add_entities([global_sensor])
+    global_sensor.attach_coordinator(coordinator)
+
     from .__init__ import _update_entities
     await _update_entities(hass, entry, coordinator)
 
@@ -472,6 +509,11 @@ class ShipmentSensor(CoordinatorEntity, SensorEntity):
             "tracking_number": self._tracking_number,
             "integration_domain": DOMAIN,
         }
+        if isinstance(self.parcel_data, dict) and "_raw_response" in self.parcel_data:
+            raw_payload = self.parcel_data.get("_raw_response")
+        else:
+            raw_payload = self.parcel_data
+        attrs["raw_response"] = _ensure_json_payload(raw_payload)
         raw_status = _get_raw_status(self.parcel_data, self._courier)
         attrs["status_raw"] = raw_status
         attrs["status_key"] = _normalize_status(raw_status, self._courier)
@@ -519,3 +561,86 @@ class ShipmentSensor(CoordinatorEntity, SensorEntity):
         else:
             self._attr_available = False
             self.async_write_ha_state()
+
+
+class ActiveShipmentsSensor(SensorEntity):
+    _attr_should_poll = False
+
+    def __init__(self, hass):
+        self._hass = hass
+        self._coordinators = {}
+        self._attr_unique_id = get_active_shipments_unique_id()
+        self._attr_suggested_object_id = ACTIVE_SHIPMENTS_OBJECT_ID
+        self._attr_has_entity_name = True
+        self._language = _normalize_language(_get_hass_language(hass))
+        self._attr_name = _translate_label("active_shipments", self._language)
+        self._attr_icon = "mdi:package-variant"
+
+    async def async_added_to_hass(self):
+        await self._async_ensure_entity_id()
+        for coordinator in self._iter_coordinators():
+            self.attach_coordinator(coordinator)
+
+    @property
+    def native_value(self):
+        total = 0
+        for coordinator in self._iter_coordinators():
+            total += _count_active_parcels(coordinator.data or [], coordinator.courier)
+        return total
+
+    def attach_coordinator(self, coordinator):
+        if coordinator in self._coordinators:
+            return
+        remove_listener = coordinator.async_add_listener(self._handle_coordinator_update)
+        self._coordinators[coordinator] = remove_listener
+        self._handle_coordinator_update()
+
+    def detach_coordinator(self, coordinator):
+        remove_listener = self._coordinators.pop(coordinator, None)
+        if remove_listener:
+            remove_listener()
+        self._handle_coordinator_update()
+
+    def _handle_coordinator_update(self):
+        self.async_write_ha_state()
+
+    def _iter_coordinators(self):
+        if self._coordinators:
+            for coordinator in list(self._coordinators.keys()):
+                yield coordinator
+            return
+        data = self._hass.data.get(DOMAIN, {})
+        for coordinator in data.values():
+            if not getattr(coordinator, "courier", None):
+                continue
+            if not hasattr(coordinator, "data"):
+                continue
+            yield coordinator
+
+    async def _async_ensure_entity_id(self):
+        if not self.hass:
+            return
+        try:
+            from homeassistant.helpers import entity_registry as er
+        except Exception:
+            return
+        registry = er.async_get(self.hass)
+        current_entity_id = registry.async_get_entity_id(
+            "sensor",
+            DOMAIN,
+            get_active_shipments_unique_id(),
+        )
+        if not current_entity_id:
+            return
+        desired_entity_id = f"sensor.{ACTIVE_SHIPMENTS_OBJECT_ID}"
+        if current_entity_id == desired_entity_id:
+            return
+        if registry.async_get(desired_entity_id):
+            return
+        deleted = getattr(registry, "deleted_entities", None)
+        if deleted and desired_entity_id in deleted:
+            return
+        try:
+            registry.async_update_entity(current_entity_id, new_entity_id=desired_entity_id)
+        except (ValueError, KeyError):
+            return
