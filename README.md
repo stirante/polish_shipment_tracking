@@ -45,12 +45,6 @@ Integracja dla Home Assistant do śledzenia przesyłek u popularnych przewoźnik
 
 ### Instalacja przez HACS (zalecane)
 
-**Naciśnij przycisk:**
-
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=stirante&repository=polish_shipment_tracking&category=integration)
-
-**LUB:**
-
 1. Otwórz HACS -> Integrations.
 2. Dodaj repo jako Custom repository:
    - Repository: https://github.com/stirante/polish_shipment_tracking

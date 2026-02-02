@@ -1,9 +1,10 @@
 import voluptuous as vol
 import uuid
 import json
+import logging
 from homeassistant import config_entries
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-import logging
+
 from .const import (
     DOMAIN,
     CONF_COURIER,
@@ -16,7 +17,7 @@ from .const import (
     CONF_REFRESH_EXPIRES_AT,
     CONF_DEVICE_UID,
 )
-from .api import normalize_phone
+from .api_helpers import normalize_phone
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -60,17 +61,17 @@ class ShipmentTrackingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             try:
                 if self.courier == "inpost":
-                    from .api import InPostApi
+                    from .api_inpost import InPostApi
                     self.api_instance = InPostApi(session, device_uid=self.device_uid)
                     await self.api_instance.send_sms_code(self.phone)
 
                 elif self.courier == "dpd":
-                    from .api import DpdApi
+                    from .api_dpd import DpdApi
                     self.api_instance = DpdApi(session)
                     await self.api_instance.send_sms_code(self.phone)
 
                 elif self.courier == "dhl":
-                    from .api import DhlApi
+                    from .api_dhl import DhlApi
                     self.api_instance = DhlApi(session)
                     await self.api_instance.generate_code(self.phone)
 
@@ -97,7 +98,7 @@ class ShipmentTrackingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             session = async_get_clientsession(self.hass)
             try:
-                from .api import PocztexApi
+                from .api_pocztex import PocztexApi
                 api = PocztexApi(session)
                 data = await api.login(email, password)
 
@@ -136,7 +137,7 @@ class ShipmentTrackingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 tokens = {}
                 
                 if self.courier == "inpost":
-                    from .api import InPostApi
+                    from .api_inpost import InPostApi
                     api = InPostApi(session, device_uid=self.device_uid)
                     data = await api.confirm_sms_code(self.phone, code)
                     tokens = {
@@ -145,7 +146,7 @@ class ShipmentTrackingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     }
 
                 elif self.courier == "dpd":
-                    from .api import DpdApi
+                    from .api_dpd import DpdApi
                     api = DpdApi(session)
                     data = await api.register_with_code(self.phone, code)
                     tokens = {
@@ -154,7 +155,7 @@ class ShipmentTrackingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     }
                 
                 elif self.courier == "dhl":
-                    from .api import DhlApi
+                    from .api_dhl import DhlApi
                     api = DhlApi(session)
                     data = await api.validate_code(self.phone, code, self.device_uid)
                     token = data.get("accessToken") or data.get("data", {}).get("accessToken")

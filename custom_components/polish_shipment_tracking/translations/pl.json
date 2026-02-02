@@ -1,46 +1,58 @@
 {
-  "title": "Śledzenie przesyłek",
   "config": {
     "step": {
       "user": {
-        "title": "Połącz konto kuriera",
-        "description": "Wybierz kuriera, aby kontynuować konfigurację.",
         "data": {
           "courier": "Kurier"
         }
       },
       "phone": {
-        "title": "Podaj numer telefonu",
-        "description": "Wpisz numer telefonu, aby otrzymać kod SMS.",
+        "description": "Wprowadź numer telefonu zarejestrowany u kuriera {courier}.",
         "data": {
           "phone": "Numer telefonu"
         }
       },
-      "pocztex_credentials": {
-        "title": "Zaloguj się do Pocztex",
-        "description": "Podaj adres e-mail i hasło do aplikacji Pocztex. Aby automatyczne dodawanie paczek działało, dodaj numer telefonu do konta w aplikacji Pocztex Mobile.",
+      "sms": {
+        "description": "Wprowadź kod weryfikacyjny wysłany na numer {phone}.",
         "data": {
-          "email": "Adres e-mail",
-          "password": "Hasło"
+          "code": "Kod weryfikacyjny"
         }
       },
-      "sms": {
-        "title": "Wpisz kod SMS",
-        "description": "Wpisz kod wysłany na numer {phone}.",
+      "pocztex_credentials": {
+        "description": "Wprowadź dane logowania do konta Pocztex (Poczta Polska).",
         "data": {
-          "code": "Kod SMS"
+          "email": "Email",
+          "password": "Hasło"
         }
       }
     },
     "error": {
-      "auth_error": "Błąd uwierzytelniania. Sprawdź dane logowania i spróbuj ponownie.",
-      "invalid_code": "Nieprawidłowy kod. Spróbuj ponownie."
+      "auth_error": "Błąd uwierzytelniania. Sprawdź swoje dane.",
+      "invalid_code": "Nieprawidłowy kod weryfikacyjny.",
+      "unknown": "Wystąpił nieoczekiwany błąd."
+    },
+    "abort": {
+      "already_configured": "Konto jest już skonfigurowane."
     }
   },
   "entity": {
     "sensor": {
-      "parcel": {
-        "name": "Paczka"
+      "shipment_status": {
+        "name": "Status przesyłki",
+        "state": {
+          "created": "Utworzona",
+          "in_transport": "W transporcie",
+          "handed_out_for_delivery": "Wydana do doręczenia",
+          "waiting_for_pickup": "Gotowa do odbioru",
+          "delivered": "Doręczona",
+          "returned": "Zwrócona do nadawcy",
+          "cancelled": "Anulowana",
+          "exception": "Problem z doręczeniem",
+          "unknown": "Nieznany"
+        }
+      },
+      "active_shipments": {
+        "name": "Aktywne przesyłki"
       }
     }
   }

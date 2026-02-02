@@ -6,5 +6,25 @@ on:
       - "v*.*.*"
 
 jobs:
-  validate:
-    uses: ./.github/workflows/run-validation.yml
+  hassfest:
+    name: hassfest (tag)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: hassfest
+        uses: home-assistant/actions/hassfest@master
+
+  hacs:
+    name: hacs (tag)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: HACS validation
+        uses: hacs/action@main
+        with:
+          category: integration
+          ignore: brands

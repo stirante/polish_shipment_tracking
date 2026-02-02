@@ -1,4 +1,4 @@
-﻿const CARD_TRANSLATIONS = {
+const CARD_TRANSLATIONS = {
   en: {
     "card.title": "Shipments",
     "labels.pickup_code": "CODE",
