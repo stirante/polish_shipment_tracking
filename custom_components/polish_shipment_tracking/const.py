@@ -4,7 +4,7 @@ from typing import Final
 
 DOMAIN = "polish_shipment_tracking"
 LEGACY_DOMAIN = "shipment_tracking"
-PLATFORMS = ["sensor"]
+PLATFORMS = ["sensor", "binary_sensor"]
 
 CONF_COURIER = "courier"
 CONF_PHONE = "phone"
