@@ -89,7 +89,7 @@ class DpdApi:
 
     async def refresh_access_token(self):
         if not self._refresh_token:
-            return
+            raise Exception("Missing DPD refresh token")
 
         url = f"{self.SSO_URL}/auth/realms/DPD/protocol/openid-connect/token"
         form_data = {
@@ -99,16 +99,23 @@ class DpdApi:
         }
         try:
             async with self._session.post(url, data=form_data) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    self._save_token_data(data)
+                if resp.status != 200:
+                    text = await resp.text()
+                    raise Exception(f"DPD refresh failed: {resp.status} {text}")
+                data = await resp.json()
+                if not data.get("access_token"):
+                    raise Exception("DPD refresh failed: missing access_token")
+                self._save_token_data(data)
         except Exception as e:
             _LOGGER.error("DPD Token refresh failed: %s", e)
+            raise
 
     def _save_token_data(self, data):
         self._token = data.get("access_token")
-        self._refresh_token = data.get("refresh_token")
-        self._expires_at = time.time() + data.get("expires_in", 300)
+        if data.get("refresh_token"):
+            self._refresh_token = data.get("refresh_token")
+        expires_in = data.get("expires_in", 300)
+        self._expires_at = time.time() + expires_in
 
     async def get_parcels(self):
         url = f"{self.API_URL}/mdupackageservices/api/v1/packages?userContext=RECEIVER"

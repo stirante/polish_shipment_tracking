@@ -151,7 +151,8 @@ class ShipmentTrackingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     data = await api.register_with_code(self.phone, code)
                     tokens = {
                         CONF_TOKEN: data.get("access_token"),
-                        CONF_REFRESH_TOKEN: data.get("refresh_token")
+                        CONF_REFRESH_TOKEN: data.get("refresh_token"),
+                        CONF_TOKEN_EXPIRES_AT: api._expires_at,
                     }
                 
                 elif self.courier == "dhl":

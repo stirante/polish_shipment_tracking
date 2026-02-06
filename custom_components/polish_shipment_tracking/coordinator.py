@@ -60,8 +60,7 @@ class ShipmentCoordinator(DataUpdateCoordinator):
             api = DpdApi(self.session)
             api._token = token
             api._refresh_token = refresh_token
-            # DPD API also needs expires_at if available to avoid unnecessary refreshes
-            # but we don't always store it.
+            api._expires_at = data.get(CONF_TOKEN_EXPIRES_AT, 0) or 0
             return api
             
         elif self.courier == "dhl":
@@ -187,6 +186,7 @@ class ShipmentCoordinator(DataUpdateCoordinator):
                 **self.entry.data,
                 CONF_TOKEN: self.api._token,
                 CONF_REFRESH_TOKEN: self.api._refresh_token,
+                CONF_TOKEN_EXPIRES_AT: self.api._expires_at,
             }
         elif self.courier == "dhl":
             await self.api.refresh_token()
