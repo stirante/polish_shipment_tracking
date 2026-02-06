@@ -62,6 +62,21 @@ async def async_setup_entry(
         
         if new_entities:
             async_add_entities(new_entities)
+            # Fire event for newly detected shipments
+            for new_sensor in new_entities:
+                coordinator.hass.bus.async_fire(
+                    f"{DOMAIN}_new_shipment",
+                    {
+                        "courier": coordinator.courier,
+                        "shipment_id": new_sensor._tracking_number,
+                        "entity_id": getattr(new_sensor, "entity_id", None),
+                        "status_raw": get_raw_status(new_sensor.parcel_data, coordinator.courier),
+                        "status_key": normalize_status(
+                            get_raw_status(new_sensor.parcel_data, coordinator.courier),
+                            coordinator.courier,
+                        ),
+                    },
+                )
 
         # Remove entities that are no longer present
         _async_remove_old_entities(hass, entry, coordinator, current_ids)
@@ -215,6 +230,25 @@ class ShipmentSensor(CoordinatorEntity[ShipmentCoordinator], SensorEntity):
         )
         
         if my_parcel:
+            old_raw_status = get_raw_status(self.parcel_data, self._courier)
+            old_status_key = normalize_status(old_raw_status, self._courier)
+
+            new_raw_status = get_raw_status(my_parcel, self._courier)
+            new_status_key = normalize_status(new_raw_status, self._courier)
+
+            if old_status_key != new_status_key:
+                self.coordinator.hass.bus.async_fire(
+                    f"{DOMAIN}_shipment_status_changed",
+                    {
+                        "courier": self._courier,
+                        "shipment_id": self._tracking_number,
+                        "entity_id": getattr(self, "entity_id", None),
+                        "old_status_raw": old_raw_status,
+                        "old_status_key": old_status_key,
+                        "new_status_raw": new_raw_status,
+                        "new_status_key": new_status_key,
+                    },
+                )
             self.parcel_data = my_parcel
             self.async_write_ha_state()
         else:

@@ -80,6 +80,35 @@ Integracja tworzy encję `sensor` dla każdej aktywnej (niedostarczonej) przesy�
   - daty zdarzeń
   - informacje o punkcie odbioru
 
+
+
+
+## Zdarzenia (custom events)
+
+Integracja publikuje zdarzenia na magistrali `hass.bus`:
+
+- `polish_shipment_tracking_new_shipment` - nowa przesyłka
+- `polish_shipment_tracking_shipment_status_changed` - przesyłka zmieniła stan
+
+Przykładowy payload:
+
+```json
+{
+  "courier": "inpost",
+  "shipment_id": "1234567890",
+  "entity_id": "sensor.inpost_paczka_1234567890",
+  "status_raw": "in_transit",
+  "status_key": "in_transport"
+}
+```
+
+Dla `polish_shipment_tracking_shipment_status_changed` dodatkowo występują pola:
+
+- `old_status_raw`
+- `old_status_key`
+- `new_status_raw`
+- `new_status_key`
+
 ## Statusy (normalizacja)
 
 Różne nazwy statusów przewoźników są mapowane do wspólnego zestawu. Przykładowo:

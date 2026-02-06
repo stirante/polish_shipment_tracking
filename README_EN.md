@@ -80,6 +80,32 @@ The integration creates one `sensor` per active (not delivered) shipment.
   - event timestamps
   - pickup point details
 
+## Events (custom)
+
+The integration fires events on the `hass.bus`:
+
+- `polish_shipment_tracking_new_shipment` - new shipment detected
+- `polish_shipment_tracking_shipment_status_changed` - shipment status changed
+
+Example payload:
+
+```json
+{
+  "courier": "inpost",
+  "shipment_id": "1234567890",
+  "entity_id": "sensor.inpost_paczka_1234567890",
+  "status_raw": "in_transit",
+  "status_key": "in_transport"
+}
+```
+
+For `polish_shipment_tracking_shipment_status_changed`, additional fields are present:
+
+- `old_status_raw`
+- `old_status_key`
+- `new_status_raw`
+- `new_status_key`
+
 ## Status normalization
 
 Carrier-specific status names are mapped to a common set, for example:
