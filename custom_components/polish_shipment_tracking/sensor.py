@@ -141,10 +141,12 @@ class ShipmentSensor(CoordinatorEntity[ShipmentCoordinator], SensorEntity):
         attrs = {
             "courier": self._courier,
             "tracking_number": self._tracking_number,
+            "integration_domain": DOMAIN,
         }
         
         raw_status = get_raw_status(self.parcel_data, self._courier)
         attrs["status_raw"] = raw_status
+        attrs["status_key"] = normalize_status(raw_status, self._courier)
         
         # Include raw response for the custom card
         if "_raw_response" in self.parcel_data:
