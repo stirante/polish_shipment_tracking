@@ -8,6 +8,7 @@ from typing import Any
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_registry import async_get as async_get_entity_registry
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -24,6 +25,33 @@ from .helpers import (
 _LOGGER = logging.getLogger(__name__)
 
 ACTIVE_SHIPMENTS_UNIQUE_ID = f"{DOMAIN}_active_shipments"
+
+@callback
+def _ensure_pending_events_listener(hass: HomeAssistant) -> None:
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    if domain_data.get("_pending_events_listener"):
+        return
+
+    domain_data["_pending_events_listener"] = True
+
+    @callback
+    def _flush_pending_events(_: Any) -> None:
+        pending = domain_data.pop("_pending_events", [])
+        domain_data.pop("_pending_events_listener", None)
+        for event_type, event_data in pending:
+            hass.bus.async_fire(event_type, event_data)
+
+    hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _flush_pending_events)
+
+@callback
+def _queue_or_fire_event(hass: HomeAssistant, event_type: str, event_data: dict[str, Any]) -> None:
+    if hass.is_running:
+        hass.bus.async_fire(event_type, event_data)
+        return
+
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    domain_data.setdefault("_pending_events", []).append((event_type, event_data))
+    _ensure_pending_events_listener(hass)
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -44,6 +72,18 @@ async def async_setup_entry(
     entry.async_on_unload(lambda: global_sensor.detach_coordinator(coordinator))
 
     @callback
+    def _build_new_shipment_event_data(sensor: "ShipmentSensor") -> dict[str, Any]:
+        raw_status = get_raw_status(sensor.parcel_data, coordinator.courier)
+        return {
+            "courier": coordinator.courier,
+            "shipment_id": sensor._tracking_number,
+            "entity_id": getattr(sensor, "entity_id", None),
+            "status_raw": raw_status,
+            "status_key": normalize_status(raw_status, coordinator.courier),
+        }
+
+
+    @callback
     def async_update_parcels() -> None:
         """Add new sensors and remove old ones."""
         current_data = coordinator.data or []
@@ -62,20 +102,13 @@ async def async_setup_entry(
         
         if new_entities:
             async_add_entities(new_entities)
-            # Fire event for newly detected shipments
+            # Fire events for newly detected shipments.
+            # If HA isn't running yet, queue and flush after startup.
             for new_sensor in new_entities:
-                coordinator.hass.bus.async_fire(
+                _queue_or_fire_event(
+                    hass,
                     f"{DOMAIN}_new_shipment",
-                    {
-                        "courier": coordinator.courier,
-                        "shipment_id": new_sensor._tracking_number,
-                        "entity_id": getattr(new_sensor, "entity_id", None),
-                        "status_raw": get_raw_status(new_sensor.parcel_data, coordinator.courier),
-                        "status_key": normalize_status(
-                            get_raw_status(new_sensor.parcel_data, coordinator.courier),
-                            coordinator.courier,
-                        ),
-                    },
+                    _build_new_shipment_event_data(new_sensor),
                 )
 
         # Remove entities that are no longer present
@@ -237,17 +270,19 @@ class ShipmentSensor(CoordinatorEntity[ShipmentCoordinator], SensorEntity):
             new_status_key = normalize_status(new_raw_status, self._courier)
 
             if old_status_key != new_status_key:
-                self.coordinator.hass.bus.async_fire(
+                event_data = {
+                    "courier": self._courier,
+                    "shipment_id": self._tracking_number,
+                    "entity_id": getattr(self, "entity_id", None),
+                    "old_status_raw": old_raw_status,
+                    "old_status_key": old_status_key,
+                    "new_status_raw": new_raw_status,
+                    "new_status_key": new_status_key,
+                }
+                _queue_or_fire_event(
+                    self.coordinator.hass,
                     f"{DOMAIN}_shipment_status_changed",
-                    {
-                        "courier": self._courier,
-                        "shipment_id": self._tracking_number,
-                        "entity_id": getattr(self, "entity_id", None),
-                        "old_status_raw": old_raw_status,
-                        "old_status_key": old_status_key,
-                        "new_status_raw": new_raw_status,
-                        "new_status_key": new_status_key,
-                    },
+                    event_data,
                 )
             self.parcel_data = my_parcel
             self.async_write_ha_state()
