@@ -35,8 +35,24 @@ class JSModuleRegistration:
         """Register the static path and resources if needed."""
         await self._async_register_path()
         # Only attempt resource registration in storage mode.
-        if self.lovelace and self.lovelace.mode == "storage":
+        if self._is_storage_mode():
             await self._async_wait_for_lovelace_resources()
+
+    def _is_storage_mode(self) -> bool:
+        """Return True when Lovelace resources use storage mode.
+
+        Home Assistant renamed ``lovelace.mode`` to ``lovelace.resource_mode``.
+        Support both fields for compatibility across HA versions.
+        """
+        if not self.lovelace:
+            return False
+
+        mode = getattr(
+            self.lovelace,
+            "resource_mode",
+            getattr(self.lovelace, "mode", None),
+        )
+        return mode == "storage"
 
     async def _async_register_path(self) -> None:
         """Register the static HTTP path for serving frontend files."""
@@ -115,7 +131,7 @@ class JSModuleRegistration:
 
     async def async_unregister(self) -> None:
         """Remove Lovelace resources registered by this integration."""
-        if self.lovelace and self.lovelace.mode == "storage":
+        if self._is_storage_mode():
             for module in JSMODULES:
                 url = f"{URL_BASE}/{module['filename']}"
                 resources = [
