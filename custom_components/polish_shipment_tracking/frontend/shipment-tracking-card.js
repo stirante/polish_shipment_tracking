@@ -8,6 +8,18 @@ const CARD_TRANSLATIONS = {
     "meta.name": "Shipment Tracking Card",
     "meta.description": "Displays shipment tracking sensors with status badges.",
     "editor.title": "Title",
+    "editor.show_list_pickup_code": "Show pickup code in list",
+    "editor.show_list_location": "Show pickup point in list",
+    "editor.show_dialog_sender": "Show sender in details",
+    "editor.show_dialog_recipient": "Show recipient in details",
+    "editor.show_dialog_pickup_code": "Show pickup code in details",
+    "editor.show_dialog_pickup_point": "Show pickup point in details",
+    "editor.show_dialog_navigation": "Show navigation link in details",
+    "editor.show_dialog_cod": "Show COD amount in details",
+    "editor.show_dialog_parcel_size": "Show parcel size in details",
+    "editor.show_dialog_qr_code": "Show QR code in details",
+    "editor.show_dialog_timeline": "Show timeline in details",
+    "editor.show_dialog_entity_button": "Show entity button in details",
     "dialog.sender": "Sender",
     "dialog.recipient": "Recipient",
     "dialog.pickup_code": "Pickup Code",
@@ -20,6 +32,7 @@ const CARD_TRANSLATIONS = {
     "dialog.timeline": "Timeline",
     "dialog.no_timeline": "No timeline history available",
     "dialog.scan_qr": "Scan at the parcel locker",
+    "dialog.show_entity": "Show entity",
     "dialog.close": "Close",
     "dpd.DELIVERED": "Delivered",
     "dpd.HANDED_OVER_FOR_DELIVERY": "Out for delivery",
@@ -37,6 +50,18 @@ const CARD_TRANSLATIONS = {
     "meta.name": "Karta śledzenia przesyłek",
     "meta.description": "Wyświetla sensory śledzenia przesyłek z etykietami statusu.",
     "editor.title": "Tytuł",
+    "editor.show_list_pickup_code": "Pokaż kod odbioru na liście",
+    "editor.show_list_location": "Pokaż lokalizację na liście",
+    "editor.show_dialog_sender": "Pokaż nadawcę w szczegółach",
+    "editor.show_dialog_recipient": "Pokaż odbiorcę w szczegółach",
+    "editor.show_dialog_pickup_code": "Pokaż kod odbioru w szczegółach",
+    "editor.show_dialog_pickup_point": "Pokaż punkt odbioru w szczegółach",
+    "editor.show_dialog_navigation": "Pokaż link nawigacji w szczegółach",
+    "editor.show_dialog_cod": "Pokaż kwotę pobrania w szczegółach",
+    "editor.show_dialog_parcel_size": "Pokaż gabaryt paczki w szczegółach",
+    "editor.show_dialog_qr_code": "Pokaż kod QR w szczegółach",
+    "editor.show_dialog_timeline": "Pokaż historię przesyłki w szczegółach",
+    "editor.show_dialog_entity_button": "Pokaż przycisk encji w szczegółach",
     "dialog.sender": "Nadawca",
     "dialog.recipient": "Odbiorca",
     "dialog.pickup_code": "Kod odbioru",
@@ -49,6 +74,7 @@ const CARD_TRANSLATIONS = {
     "dialog.timeline": "Historia przesyłki",
     "dialog.no_timeline": "Brak historii przesyłki",
     "dialog.scan_qr": "Zeskanuj w paczkomacie",
+    "dialog.show_entity": "Pokaż encję",
     "dialog.close": "Zamknij",
     "dpd.DELIVERED": "Dostarczona",
     "dpd.HANDED_OVER_FOR_DELIVERY": "Wydana do doręczenia",
@@ -338,6 +364,16 @@ class ShipmentTrackingCard extends HTMLElement {
           .timeline-date { font-size: 0.8rem; color: var(--secondary-text-color); margin-bottom: 4px; }
           .timeline-title { font-weight: 500; font-size: 0.95rem; margin-bottom: 2px; }
           .timeline-desc { font-size: 0.85rem; color: var(--secondary-text-color); line-height: 1.4; }
+          .modal-actions { margin-top: 18px; display: flex; justify-content: flex-end; }
+          .modal-action-btn {
+            border: 1px solid var(--primary-color);
+            background: transparent;
+            color: var(--primary-color);
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-weight: 600;
+            cursor: pointer;
+          }
         </style>
 
         <ha-card>
@@ -391,6 +427,7 @@ class ShipmentTrackingCard extends HTMLElement {
   setConfig(config) {
     this.config = { ...(config || {}) };
     this._updateTitle();
+    this.updateContent();
   }
 
   static getStubConfig() {
@@ -416,6 +453,10 @@ class ShipmentTrackingCard extends HTMLElement {
     
     const closeBtn = this.querySelector('#qr-fullscreen-close');
     if (closeBtn) closeBtn.innerText = this._localize("dialog.close");
+  }
+
+  _isEnabled(optionName) {
+    return this.config?.[optionName] !== false;
   }
 
   getStatusInfo(stateObj) {
@@ -494,9 +535,18 @@ class ShipmentTrackingCard extends HTMLElement {
     if (attrs.tracking_number) {
         infoHtml += `<div class="modal-info-block-row"><strong>Numer:</strong> <span class="val" style="flex-grow: 1; user-select: all; -webkit-user-select: all;">${attrs.tracking_number}</span></div>`;
     }
-    if (attrs.sender || attrs.sender_name) infoHtml += `<div class="modal-info-block-row"><strong>${this._localize("dialog.sender")}:</strong> <span class="val">${attrs.sender || attrs.sender_name}</span></div>`;
-    if (attrs.recipient_name) infoHtml += `<div class="modal-info-block-row"><strong>${this._localize("dialog.recipient")}:</strong> <span class="val">${attrs.recipient_name}</span></div>`;
-    if (attrs.pickup_code || attrs.open_code) infoHtml += `<div class="modal-info-block-row"><strong>${this._localize("dialog.pickup_code")}:</strong> <span class="val">${attrs.pickup_code || attrs.open_code}</span></div>`;
+    if (attrs.courier) {
+      infoHtml += `<div class="modal-info-block-row"><strong>${this._localize("dialog.courier_name")}:</strong> <span class="val">${attrs.courier}</span></div>`;
+    }
+    if (this._isEnabled("show_dialog_sender") && (attrs.sender || attrs.sender_name)) {
+      infoHtml += `<div class="modal-info-block-row"><strong>${this._localize("dialog.sender")}:</strong> <span class="val">${attrs.sender || attrs.sender_name}</span></div>`;
+    }
+    if (this._isEnabled("show_dialog_recipient") && attrs.recipient_name) {
+      infoHtml += `<div class="modal-info-block-row"><strong>${this._localize("dialog.recipient")}:</strong> <span class="val">${attrs.recipient_name}</span></div>`;
+    }
+    if (this._isEnabled("show_dialog_pickup_code") && (attrs.pickup_code || attrs.open_code)) {
+      infoHtml += `<div class="modal-info-block-row"><strong>${this._localize("dialog.pickup_code")}:</strong> <span class="val">${attrs.pickup_code || attrs.open_code}</span></div>`;
+    }
     
     let timelineHtml = '';
     
@@ -512,11 +562,11 @@ class ShipmentTrackingCard extends HTMLElement {
           return date.toLocaleString(locale, { dateStyle: 'short', timeStyle: 'short' });
         };
 
-        if (courier === 'dpd' && raw.delivery && raw.delivery.courier_name) {
+        if (!attrs.courier && courier === 'dpd' && raw.delivery && raw.delivery.courier_name) {
           infoHtml += `<div class="modal-info-block-row"><strong>${this._localize("dialog.courier_name")}:</strong> <span class="val">${raw.delivery.courier_name}</span></div>`;
         }
 
-        if (courier === 'pocztex' && (raw.amount !== null || raw.paymentAmount !== null)) {
+        if (this._isEnabled("show_dialog_cod") && courier === 'pocztex' && (raw.amount !== null || raw.paymentAmount !== null)) {
           const amountStr = (raw.amount !== null ? raw.amount : raw.paymentAmount) + ' zł';
           infoHtml += `<div class="modal-info-block-row"><strong>${this._localize("dialog.cod")}:</strong> <span class="val">${amountStr}</span></div>`;
         }
@@ -541,10 +591,10 @@ class ShipmentTrackingCard extends HTMLElement {
             }
           }
         }
-        if (locationName) {
+        if (this._isEnabled("show_dialog_pickup_point") && locationName) {
           let locationContent = `<span class="val">${locationName}`;
           
-          if (courier === 'inpost' && raw.pickUpPoint?.location?.latitude && raw.pickUpPoint?.location?.longitude) {
+          if (this._isEnabled("show_dialog_navigation") && courier === 'inpost' && raw.pickUpPoint?.location?.latitude && raw.pickUpPoint?.location?.longitude) {
             const lat = raw.pickUpPoint.location.latitude;
             const lon = raw.pickUpPoint.location.longitude;
             locationContent += `<br><a href="https://maps.google.com/?q=${lat},${lon}" target="_blank" class="modal-nav-link"><ha-icon icon="mdi:map-marker-path"></ha-icon> ${this._localize("dialog.navigate")}</a>`;
@@ -554,7 +604,7 @@ class ShipmentTrackingCard extends HTMLElement {
           infoHtml += `<div class="modal-info-block-row"><strong>${this._localize("dialog.pickup_point")}:</strong> ${locationContent}</div>`;
         }
 
-        if (courier === 'inpost' && raw.qrCode && attrs.status_key === 'waiting_for_pickup') {
+        if (this._isEnabled("show_dialog_qr_code") && courier === 'inpost' && raw.qrCode && attrs.status_key === 'waiting_for_pickup') {
            const qrUrlSmall = `https://quickchart.io/qr?text=${encodeURIComponent(raw.qrCode)}&size=150&margin=0&ecLevel=H`;
            const qrUrlLarge = `https://quickchart.io/qr?text=${encodeURIComponent(raw.qrCode)}&size=500&margin=0&ecLevel=H`;
            infoHtml += `
@@ -565,7 +615,7 @@ class ShipmentTrackingCard extends HTMLElement {
            `;
         }
 
-        if (courier === 'inpost' && raw.parcelSize) {
+        if (this._isEnabled("show_dialog_parcel_size") && courier === 'inpost' && raw.parcelSize) {
           const size = raw.parcelSize.toUpperCase();
           const inpostDimensions = {
             'A': '8 x 38 x 64 cm',
@@ -621,7 +671,7 @@ class ShipmentTrackingCard extends HTMLElement {
         console.error("Failed to parse raw_response", e);
       }
     } else {
-      if (attrs.location || attrs.current_location) {
+      if (this._isEnabled("show_dialog_pickup_point") && (attrs.location || attrs.current_location)) {
         infoHtml += `<div class="modal-info-block-row"><strong>${this._localize("dialog.pickup_point")}:</strong> <span class="val">${attrs.location || attrs.current_location}</span></div>`;
       }
     }
@@ -629,11 +679,22 @@ class ShipmentTrackingCard extends HTMLElement {
     infoHtml += `</div>`;
 
     let finalHtml = infoHtml;
-    finalHtml += `<div class="modal-section-title">${this._localize("dialog.timeline")}</div>`;
-    if (timelineHtml) {
-      finalHtml += `<div class="timeline">${timelineHtml}</div>`;
-    } else {
-      finalHtml += `<div class="timeline-desc">${this._localize("dialog.no_timeline")}</div>`;
+    if (this._isEnabled("show_dialog_timeline")) {
+      finalHtml += `<div class="modal-section-title">${this._localize("dialog.timeline")}</div>`;
+      if (timelineHtml) {
+        finalHtml += `<div class="timeline">${timelineHtml}</div>`;
+      } else {
+        finalHtml += `<div class="timeline-desc">${this._localize("dialog.no_timeline")}</div>`;
+      }
+    }
+    if (this._isEnabled("show_dialog_entity_button")) {
+      finalHtml += `
+        <div class="modal-actions">
+          <button type="button" class="modal-action-btn" data-entity-button="${entityId}">
+            ${this._localize("dialog.show_entity")}
+          </button>
+        </div>
+      `;
     }
 
     const modalContent = this.querySelector('#modal-content');
@@ -646,6 +707,17 @@ class ShipmentTrackingCard extends HTMLElement {
         const fullscreenOverlay = this.querySelector('#qr-fullscreen');
         this.querySelector('#qr-fullscreen-img').src = largeUrl;
         fullscreenOverlay.classList.add('open');
+      });
+    }
+    const entityButton = modalContent.querySelector('[data-entity-button]');
+    if (entityButton) {
+      entityButton.addEventListener('click', () => {
+        this.querySelector('#modal-overlay').classList.remove('open');
+        this.dispatchEvent(new CustomEvent("hass-more-info", {
+          detail: { entityId },
+          bubbles: true,
+          composed: true
+        }));
       });
     }
 
@@ -694,7 +766,11 @@ class ShipmentTrackingCard extends HTMLElement {
       ].join('|'));
     });
 
-    const signature = signatureParts.join('||');
+    const configSignature = [
+      this._isEnabled("show_list_pickup_code"),
+      this._isEnabled("show_list_location")
+    ].join('|');
+    const signature = `${configSignature}||${signatureParts.join('||')}`;
     if (this._lastSignature === signature) {
       return;
     }
@@ -744,10 +820,10 @@ class ShipmentTrackingCard extends HTMLElement {
         const pickupCode = attributes.open_code || attributes.pickup_code || '';
 
         let extraInfoHtml = '';
-        if (pickupCode) {
+        if (this._isEnabled("show_list_pickup_code") && pickupCode) {
             extraInfoHtml += `<div class="pickup-code">${pickupCodeLabel}: ${pickupCode}</div>`;
         }
-        if (location) {
+        if (this._isEnabled("show_list_location") && location) {
              extraInfoHtml += `<div class="extra-info-text">${pickupPointLabel}: ${location}</div>`;
         }
 
@@ -815,6 +891,7 @@ class ShipmentTrackingCardEditor extends HTMLElement {
       this.innerHTML = "";
       this._form = document.createElement("ha-form");
       this._form.addEventListener("value-changed", (event) => this._handleChange(event));
+      this._form.computeLabel = (schema) => schema.label || schema.name;
       this.appendChild(this._form);
     }
 
@@ -823,12 +900,91 @@ class ShipmentTrackingCardEditor extends HTMLElement {
         name: "title",
         label: this._localize("editor.title"),
         selector: { text: {} }
+      },
+      {
+        name: "show_list_pickup_code",
+        label: this._localize("editor.show_list_pickup_code"),
+        selector: { boolean: {} }
+      },
+      {
+        name: "show_list_location",
+        label: this._localize("editor.show_list_location"),
+        selector: { boolean: {} }
+      },
+      {
+        name: "show_dialog_sender",
+        label: this._localize("editor.show_dialog_sender"),
+        selector: { boolean: {} }
+      },
+      {
+        name: "show_dialog_recipient",
+        label: this._localize("editor.show_dialog_recipient"),
+        selector: { boolean: {} }
+      },
+      {
+        name: "show_dialog_pickup_code",
+        label: this._localize("editor.show_dialog_pickup_code"),
+        selector: { boolean: {} }
+      },
+      {
+        name: "show_dialog_pickup_point",
+        label: this._localize("editor.show_dialog_pickup_point"),
+        selector: { boolean: {} }
+      },
+      {
+        name: "show_dialog_navigation",
+        label: this._localize("editor.show_dialog_navigation"),
+        selector: { boolean: {} }
+      },
+      {
+        name: "show_dialog_cod",
+        label: this._localize("editor.show_dialog_cod"),
+        selector: { boolean: {} }
+      },
+      {
+        name: "show_dialog_parcel_size",
+        label: this._localize("editor.show_dialog_parcel_size"),
+        selector: { boolean: {} }
+      },
+      {
+        name: "show_dialog_qr_code",
+        label: this._localize("editor.show_dialog_qr_code"),
+        selector: { boolean: {} }
+      },
+      {
+        name: "show_dialog_timeline",
+        label: this._localize("editor.show_dialog_timeline"),
+        selector: { boolean: {} }
+      },
+      {
+        name: "show_dialog_entity_button",
+        label: this._localize("editor.show_dialog_entity_button"),
+        selector: { boolean: {} }
       }
     ];
 
+    const data = { ...this._config };
+    const booleanDefaults = [
+      "show_list_pickup_code",
+      "show_list_location",
+      "show_dialog_sender",
+      "show_dialog_recipient",
+      "show_dialog_pickup_code",
+      "show_dialog_pickup_point",
+      "show_dialog_navigation",
+      "show_dialog_cod",
+      "show_dialog_parcel_size",
+      "show_dialog_qr_code",
+      "show_dialog_timeline",
+      "show_dialog_entity_button"
+    ];
+    booleanDefaults.forEach((key) => {
+      if (data[key] === undefined) data[key] = true;
+    });
+
     this._form.hass = this._hass;
     this._form.schema = schema;
-    this._form.data = { ...this._config };
+    this._form.data = data;
   }
 
   _handleChange(event) {
