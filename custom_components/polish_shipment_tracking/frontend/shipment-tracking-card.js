@@ -7,7 +7,26 @@ const CARD_TRANSLATIONS = {
     "empty_state": "No active shipments",
     "meta.name": "Shipment Tracking Card",
     "meta.description": "Displays shipment tracking sensors with status badges.",
-    "editor.title": "Title"
+    "editor.title": "Title",
+    "dialog.sender": "Sender",
+    "dialog.recipient": "Recipient",
+    "dialog.pickup_code": "Pickup Code",
+    "dialog.pickup_point": "Pickup Point",
+    "dialog.navigate": "Navigate",
+    "dialog.parcel_size": "Size",
+    "dialog.max_dimensions": "Max dimensions",
+    "dialog.cod": "COD Amount",
+    "dialog.courier_name": "Courier Name",
+    "dialog.timeline": "Timeline",
+    "dialog.no_timeline": "No timeline history available",
+    "dialog.scan_qr": "Scan at the parcel locker",
+    "dialog.close": "Close",
+    "dpd.DELIVERED": "Delivered",
+    "dpd.HANDED_OVER_FOR_DELIVERY": "Out for delivery",
+    "dpd.RECEIVED_IN_DEPOT": "Received in depot",
+    "dpd.IN_TRANSPORT": "In transit",
+    "dpd.RECEIVED_FROM_SENDER": "Received from sender",
+    "dpd.READY_TO_SEND": "Ready to send"
   },
   pl: {
     "card.title": "Przesyłki",
@@ -17,7 +36,26 @@ const CARD_TRANSLATIONS = {
     "empty_state": "Brak aktywnych przesyłek",
     "meta.name": "Karta śledzenia przesyłek",
     "meta.description": "Wyświetla sensory śledzenia przesyłek z etykietami statusu.",
-    "editor.title": "Tytuł"
+    "editor.title": "Tytuł",
+    "dialog.sender": "Nadawca",
+    "dialog.recipient": "Odbiorca",
+    "dialog.pickup_code": "Kod odbioru",
+    "dialog.pickup_point": "Punkt odbioru",
+    "dialog.navigate": "Nawiguj",
+    "dialog.parcel_size": "Gabaryt",
+    "dialog.max_dimensions": "Maksymalne wymiary",
+    "dialog.cod": "Kwota pobrania",
+    "dialog.courier_name": "Kurier",
+    "dialog.timeline": "Historia przesyłki",
+    "dialog.no_timeline": "Brak historii przesyłki",
+    "dialog.scan_qr": "Zeskanuj w paczkomacie",
+    "dialog.close": "Zamknij",
+    "dpd.DELIVERED": "Dostarczona",
+    "dpd.HANDED_OVER_FOR_DELIVERY": "Wydana do doręczenia",
+    "dpd.RECEIVED_IN_DEPOT": "Przyjęta w oddziale",
+    "dpd.IN_TRANSPORT": "W drodze",
+    "dpd.RECEIVED_FROM_SENDER": "Odebrana od nadawcy",
+    "dpd.READY_TO_SEND": "Gotowa do wysłania"
   }
 };
 
@@ -71,6 +109,7 @@ class ShipmentTrackingCard extends HTMLElement {
             transition: all 0.2s ease-in-out;
             border: 1px solid transparent;
             position: relative;
+            cursor: pointer;
           }
           .shipment-item:hover {
             border-color: var(--primary-color);
@@ -126,21 +165,34 @@ class ShipmentTrackingCard extends HTMLElement {
           .courier {
             font-size: 0.85rem;
             color: var(--secondary-text-color);
-            display: flex;
-            align-items: center;
-            gap: 5px;
+            display: block;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
+          .truncate-left {
+            direction: rtl;
+            text-align: left;
           }
           .row-bottom {
             display: block;
             width: 100%;
           }
           .extra-info {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-top: 6px;
+          }
+          .extra-info-text {
             font-size: 0.75rem;
             color: var(--secondary-text-color);
-            margin-top: 6px;
             opacity: 0.9;
-            white-space: normal;
             line-height: 1.3;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
           }
           .status-badge {
             padding: 6px 10px;
@@ -156,16 +208,14 @@ class ShipmentTrackingCard extends HTMLElement {
           }
           .pickup-code {
             display: inline-block;
-            margin-top: 6px;
             background-color: var(--primary-color);
             color: var(--text-primary-color, white);
-            padding: 3px 8px;
+            padding: 4px 8px;
             border-radius: 6px;
             font-weight: bold;
             font-size: 0.85rem;
             letter-spacing: 1px;
-            margin-right: 8px;
-            vertical-align: middle;
+            width: fit-content;
           }
           .status-delivered { background-color: rgba(76, 175, 80, 0.2); color: #4CAF50; }
           .status-ready { background-color: rgba(255, 193, 7, 0.2); color: #FFC107; border: 1px solid rgba(255, 193, 7, 0.3); }
@@ -177,18 +227,162 @@ class ShipmentTrackingCard extends HTMLElement {
             padding: 20px;
             color: var(--secondary-text-color);
           }
+
+          .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.5); z-index: 9999;
+            display: none; justify-content: center; align-items: center;
+            backdrop-filter: blur(2px);
+          }
+          .modal-overlay.open { display: flex; }
+          .modal-surface {
+            background: var(--primary-background-color);
+            color: var(--primary-text-color);
+            width: 90%; max-width: 500px; max-height: 85vh;
+            border-radius: var(--ha-card-border-radius, 12px);
+            box-shadow: var(--ha-card-box-shadow, 0 8px 24px rgba(0,0,0,0.2));
+            display: flex; flex-direction: column; overflow: hidden;
+          }
+          .modal-header {
+            padding: 16px 20px; border-bottom: 1px solid var(--divider-color, rgba(0,0,0,0.1));
+            display: flex; justify-content: space-between; align-items: center;
+            font-size: 1.2rem; font-weight: 500; background: var(--secondary-background-color);
+          }
+          .modal-header ha-icon { cursor: pointer; color: var(--secondary-text-color); }
+          
+          .modal-content { 
+            padding: 20px; overflow-y: auto; flex: 1; 
+            user-select: text; -webkit-user-select: text; 
+          }
+          
+          .modal-info-block {
+            background: var(--secondary-background-color, rgba(0,0,0,0.02));
+            padding: 14px; border-radius: 8px; margin-bottom: 20px;
+            font-size: 0.95rem; border: 1px solid var(--divider-color, rgba(0,0,0,0.05));
+          }
+          .modal-info-block-row { margin-bottom: 8px; line-height: 1.4; display: flex; align-items: flex-start;}
+          .modal-info-block-row:last-child { margin-bottom: 0; }
+          .modal-info-block-row strong { color: var(--secondary-text-color); font-weight: 500; min-width: 100px; flex-shrink: 0; }
+          .modal-info-block-row span.val { flex-grow: 1; }
+          
+          .qr-code-container {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            background: #ffffff; padding: 16px; border-radius: 12px; margin-top: 16px;
+            border: 2px solid var(--primary-color); cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1); transition: transform 0.2s;
+          }
+          .qr-code-container:active { transform: scale(0.98); }
+          .qr-code-container img {
+            width: 150px; height: 150px; image-rendering: crisp-edges;
+          }
+          .qr-code-label {
+            margin-top: 12px; font-size: 0.9rem; color: #333333; font-weight: 600; text-align: center;
+          }
+
+          .qr-fullscreen-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #ffffff; z-index: 10000;
+            display: none; justify-content: center; align-items: center; flex-direction: column;
+          }
+          .qr-fullscreen-overlay.open { display: flex; }
+          .qr-fullscreen-overlay img { 
+            width: 80vw; max-width: 400px; height: auto; image-rendering: crisp-edges;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15); border-radius: 12px; padding: 10px; border: 1px solid #eee;
+          }
+          .qr-fullscreen-close {
+            margin-top: 40px; padding: 12px 24px; background: var(--primary-color);
+            color: var(--text-primary-color, white); border-radius: 8px; font-weight: bold; cursor: pointer;
+            font-size: 1.1rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+          }
+
+          .parcel-sizes { display: flex; gap: 12px; align-items: flex-end; margin-top: 8px; margin-bottom: 4px; }
+          .parcel-size {
+            display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+            background: var(--primary-background-color, rgba(0,0,0,0.05)); border-radius: 8px; padding: 8px;
+            min-width: 45px; color: var(--secondary-text-color); border: 1px solid var(--divider-color, rgba(0,0,0,0.1));
+            opacity: 0.5; transition: all 0.2s ease; cursor: help;
+            user-select: none; -webkit-user-select: none;
+          }
+          .parcel-size.active {
+            opacity: 1; background: var(--primary-color); color: var(--text-primary-color, white);
+            border-color: var(--primary-color); font-weight: bold; transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15); cursor: default;
+          }
+          .parcel-size span { display: block; background: currentColor; border-radius: 2px; margin-bottom: 6px; opacity: 0.9; }
+          .parcel-size .box-a { width: 26px; height: 8px; }
+          .parcel-size .box-b { width: 26px; height: 18px; }
+          .parcel-size .box-c { width: 26px; height: 32px; }
+          .parcel-size-info { font-size: 0.8rem; color: var(--secondary-text-color); margin-top: 6px; }
+
+          .modal-nav-link {
+            display: inline-flex; align-items: center; gap: 4px;
+            color: var(--primary-color); text-decoration: none; font-weight: 500;
+            margin-top: 4px; font-size: 0.9rem;
+          }
+          .modal-nav-link ha-icon { --mdc-icon-size: 16px; }
+          .modal-section-title { font-size: 1.1rem; font-weight: 500; margin-bottom: 12px; color: var(--primary-text-color); }
+          .timeline { position: relative; padding-left: 20px; margin-top: 10px; }
+          .timeline-item { position: relative; padding-bottom: 20px; }
+          .timeline-item:last-child { padding-bottom: 0; }
+          .timeline-item::before {
+            content: ''; position: absolute; left: -20px; top: 6px;
+            width: 10px; height: 10px; border-radius: 50%;
+            background: var(--primary-color); border: 2px solid var(--ha-card-background, white);
+            box-shadow: 0 0 0 1px var(--primary-color); z-index: 1;
+          }
+          .timeline-item::after {
+            content: ''; position: absolute; left: -16px; top: 16px; bottom: -6px;
+            width: 2px; background: var(--divider-color, rgba(0,0,0,0.1));
+          }
+          .timeline-item:last-child::after { display: none; }
+          .timeline-date { font-size: 0.8rem; color: var(--secondary-text-color); margin-bottom: 4px; }
+          .timeline-title { font-weight: 500; font-size: 0.95rem; margin-bottom: 2px; }
+          .timeline-desc { font-size: 0.85rem; color: var(--secondary-text-color); line-height: 1.4; }
         </style>
+
         <ha-card>
           <div class="header">
             <span id="card-title"></span>
             <ha-icon icon="mdi:truck-delivery-outline"></ha-icon>
           </div>
-          <div class="shipment-list" id="shipment-list">
-            </div>
+          <div class="shipment-list" id="shipment-list"></div>
         </ha-card>
+
+        <div class="modal-overlay" id="modal-overlay">
+          <div class="modal-surface">
+            <div class="modal-header">
+              <span id="modal-title"></span>
+              <ha-icon icon="mdi:close" id="modal-close"></ha-icon>
+            </div>
+            <div class="modal-content" id="modal-content"></div>
+          </div>
+        </div>
+
+        <div class="qr-fullscreen-overlay" id="qr-fullscreen">
+          <img id="qr-fullscreen-img" src="" alt="QR Code Fullscreen" />
+          <div class="qr-fullscreen-close" id="qr-fullscreen-close"></div>
+        </div>
       `;
       this.content = this.querySelector("#shipment-list");
       this.titleElement = this.querySelector("#card-title");
+
+      this.querySelector('#modal-close').addEventListener('click', () => {
+        this.querySelector('#modal-overlay').classList.remove('open');
+      });
+      this.querySelector('#modal-overlay').addEventListener('click', (e) => {
+        if (e.target.id === 'modal-overlay') {
+          this.querySelector('#modal-overlay').classList.remove('open');
+        }
+      });
+      
+      this.querySelector('#qr-fullscreen-close').addEventListener('click', () => {
+        this.querySelector('#qr-fullscreen').classList.remove('open');
+      });
+      this.querySelector('#qr-fullscreen').addEventListener('click', (e) => {
+        if (e.target.id === 'qr-fullscreen') {
+          this.querySelector('#qr-fullscreen').classList.remove('open');
+        }
+      });
     }
     this._updateTitle();
     this.updateContent();
@@ -219,6 +413,9 @@ class ShipmentTrackingCard extends HTMLElement {
     if (!this.titleElement) return;
     const title = this.config?.title || this._localize("card.title");
     this.titleElement.innerText = title;
+    
+    const closeBtn = this.querySelector('#qr-fullscreen-close');
+    if (closeBtn) closeBtn.innerText = this._localize("dialog.close");
   }
 
   getStatusInfo(stateObj) {
@@ -280,6 +477,179 @@ class ShipmentTrackingCard extends HTMLElement {
       if (n.includes(key)) return url;
     }
     return null;
+  }
+
+  openDialog(entityId) {
+    const stateObj = this._hass.states[entityId];
+    if (!stateObj) return;
+
+    const attrs = stateObj.attributes;
+    const rawStr = attrs.raw_response;
+    const friendlyName = attrs.sender || attrs.sender_name || attrs.recipient_name || attrs.tracking_number;
+    
+    this.querySelector('#modal-title').innerText = friendlyName;
+
+    let infoHtml = `<div class="modal-info-block">`;
+    
+    if (attrs.tracking_number) {
+        infoHtml += `<div class="modal-info-block-row"><strong>Numer:</strong> <span class="val" style="flex-grow: 1; user-select: all; -webkit-user-select: all;">${attrs.tracking_number}</span></div>`;
+    }
+    if (attrs.sender || attrs.sender_name) infoHtml += `<div class="modal-info-block-row"><strong>${this._localize("dialog.sender")}:</strong> <span class="val">${attrs.sender || attrs.sender_name}</span></div>`;
+    if (attrs.recipient_name) infoHtml += `<div class="modal-info-block-row"><strong>${this._localize("dialog.recipient")}:</strong> <span class="val">${attrs.recipient_name}</span></div>`;
+    if (attrs.pickup_code || attrs.open_code) infoHtml += `<div class="modal-info-block-row"><strong>${this._localize("dialog.pickup_code")}:</strong> <span class="val">${attrs.pickup_code || attrs.open_code}</span></div>`;
+    
+    let timelineHtml = '';
+    
+    if (rawStr) {
+      try {
+        const raw = JSON.parse(rawStr);
+        const courier = (attrs.courier || (entityId.includes('inpost') ? 'inpost' : '')).toLowerCase();
+        const locale = this._hass.language || 'pl';
+        const formatDateTime = (value) => {
+          if (!value) return '';
+          const date = new Date(value);
+          if (Number.isNaN(date.getTime())) return value;
+          return date.toLocaleString(locale, { dateStyle: 'short', timeStyle: 'short' });
+        };
+
+        if (courier === 'dpd' && raw.delivery && raw.delivery.courier_name) {
+          infoHtml += `<div class="modal-info-block-row"><strong>${this._localize("dialog.courier_name")}:</strong> <span class="val">${raw.delivery.courier_name}</span></div>`;
+        }
+
+        if (courier === 'pocztex' && (raw.amount !== null || raw.paymentAmount !== null)) {
+          const amountStr = (raw.amount !== null ? raw.amount : raw.paymentAmount) + ' zł';
+          infoHtml += `<div class="modal-info-block-row"><strong>${this._localize("dialog.cod")}:</strong> <span class="val">${amountStr}</span></div>`;
+        }
+
+        let locationName = attrs.location || attrs.current_location;
+        if (locationName && courier === 'inpost' && raw.pickUpPoint?.locationDescription) {
+          locationName += ' (' + raw.pickUpPoint.locationDescription + ')';
+        }
+        if (!locationName && courier === 'pocztex') {
+          const pickupLocation = raw.pickupLocation;
+          if (typeof pickupLocation === 'string') {
+            locationName = pickupLocation;
+          } else if (pickupLocation && typeof pickupLocation === 'object') {
+            const parts = [
+              pickupLocation.name,
+              pickupLocation.address,
+              pickupLocation.street,
+              pickupLocation.city
+            ].filter(Boolean);
+            if (parts.length > 0) {
+              locationName = parts.join(', ');
+            }
+          }
+        }
+        if (locationName) {
+          let locationContent = `<span class="val">${locationName}`;
+          
+          if (courier === 'inpost' && raw.pickUpPoint?.location?.latitude && raw.pickUpPoint?.location?.longitude) {
+            const lat = raw.pickUpPoint.location.latitude;
+            const lon = raw.pickUpPoint.location.longitude;
+            locationContent += `<br><a href="https://maps.google.com/?q=${lat},${lon}" target="_blank" class="modal-nav-link"><ha-icon icon="mdi:map-marker-path"></ha-icon> ${this._localize("dialog.navigate")}</a>`;
+          }
+          
+          locationContent += `</span>`;
+          infoHtml += `<div class="modal-info-block-row"><strong>${this._localize("dialog.pickup_point")}:</strong> ${locationContent}</div>`;
+        }
+
+        if (courier === 'inpost' && raw.qrCode && attrs.status_key === 'waiting_for_pickup') {
+           const qrUrlSmall = `https://quickchart.io/qr?text=${encodeURIComponent(raw.qrCode)}&size=150&margin=0&ecLevel=H`;
+           const qrUrlLarge = `https://quickchart.io/qr?text=${encodeURIComponent(raw.qrCode)}&size=500&margin=0&ecLevel=H`;
+           infoHtml += `
+             <div class="qr-code-container" data-large-qr="${qrUrlLarge}">
+               <img src="${qrUrlSmall}" alt="QR Code" />
+               <div class="qr-code-label">${this._localize("dialog.scan_qr")}</div>
+             </div>
+           `;
+        }
+
+        if (courier === 'inpost' && raw.parcelSize) {
+          const size = raw.parcelSize.toUpperCase();
+          const inpostDimensions = {
+            'A': '8 x 38 x 64 cm',
+            'B': '19 x 38 x 64 cm',
+            'C': '41 x 38 x 64 cm'
+          };
+          const currentDim = inpostDimensions[size] || '';
+
+          infoHtml += `
+            <div style="margin-top: 16px; border-top: 1px solid var(--divider-color, rgba(0,0,0,0.05)); padding-top: 12px;">
+              <strong style="display:block; margin-bottom: 4px; color: var(--secondary-text-color);">${this._localize("dialog.parcel_size")}:</strong>
+              <div class="parcel-sizes">
+                  <div class="parcel-size ${size === 'A' ? 'active' : ''}" title="Gabaryt A: Max 8 x 38 x 64 cm, do 25 kg"><span class="box-a"></span>A</div>
+                  <div class="parcel-size ${size === 'B' ? 'active' : ''}" title="Gabaryt B: Max 19 x 38 x 64 cm, do 25 kg"><span class="box-b"></span>B</div>
+                  <div class="parcel-size ${size === 'C' ? 'active' : ''}" title="Gabaryt C: Max 41 x 38 x 64 cm, do 25 kg"><span class="box-c"></span>C</div>
+              </div>
+              ${currentDim ? `<div class="parcel-size-info">${this._localize("dialog.max_dimensions")}: <strong>${currentDim}</strong> (do 25 kg)</div>` : ''}
+            </div>`;
+        }
+
+        if (courier === 'inpost' && raw.events && raw.events.length > 0) {
+          raw.events.forEach(e => {
+            const dateStr = new Date(e.date).toLocaleString(locale, { dateStyle: 'short', timeStyle: 'short' });
+            timelineHtml += `
+              <div class="timeline-item">
+                <div class="timeline-date">${dateStr}</div>
+                <div class="timeline-title">${e.eventTitle}</div>
+                <div class="timeline-desc">${e.eventDescription || ''}</div>
+              </div>`;
+          });
+        } else if (courier === 'dpd' && raw.statuses && raw.statuses.length > 0) {
+          raw.statuses.forEach(s => {
+            const dateStr = new Date(s.date).toLocaleString(locale, { dateStyle: 'short', timeStyle: 'short' });
+            const title = this._localize(`dpd.${s.status}`) !== `dpd.${s.status}` ? this._localize(`dpd.${s.status}`) : s.status;
+            timelineHtml += `
+              <div class="timeline-item">
+                <div class="timeline-date">${dateStr}</div>
+                <div class="timeline-title">${title}</div>
+              </div>`;
+          });
+        } else if (courier === 'pocztex' && Array.isArray(raw.history) && raw.history.length > 0) {
+          raw.history.forEach(event => {
+            const dateStr = formatDateTime(event.date);
+            const title = event.state || event.stateCode || '';
+            timelineHtml += `
+              <div class="timeline-item">
+                <div class="timeline-date">${dateStr}</div>
+                <div class="timeline-title">${title}</div>
+              </div>`;
+          });
+        }
+      } catch (e) {
+        console.error("Failed to parse raw_response", e);
+      }
+    } else {
+      if (attrs.location || attrs.current_location) {
+        infoHtml += `<div class="modal-info-block-row"><strong>${this._localize("dialog.pickup_point")}:</strong> <span class="val">${attrs.location || attrs.current_location}</span></div>`;
+      }
+    }
+
+    infoHtml += `</div>`;
+
+    let finalHtml = infoHtml;
+    finalHtml += `<div class="modal-section-title">${this._localize("dialog.timeline")}</div>`;
+    if (timelineHtml) {
+      finalHtml += `<div class="timeline">${timelineHtml}</div>`;
+    } else {
+      finalHtml += `<div class="timeline-desc">${this._localize("dialog.no_timeline")}</div>`;
+    }
+
+    const modalContent = this.querySelector('#modal-content');
+    modalContent.innerHTML = finalHtml;
+
+    const qrContainer = modalContent.querySelector('.qr-code-container');
+    if (qrContainer) {
+      qrContainer.addEventListener('click', () => {
+        const largeUrl = qrContainer.getAttribute('data-large-qr');
+        const fullscreenOverlay = this.querySelector('#qr-fullscreen');
+        this.querySelector('#qr-fullscreen-img').src = largeUrl;
+        fullscreenOverlay.classList.add('open');
+      });
+    }
+
+    this.querySelector('#modal-overlay').classList.add('open');
   }
 
   updateContent() {
@@ -345,7 +715,18 @@ class ShipmentTrackingCard extends HTMLElement {
         const attributes = stateObj.attributes;
         const friendlyName = attributes.sender || attributes.sender_name || attributes.recipient_name || attributes.tracking_number;
         const courier = attributes.courier || attributes.attribution || (entityId.includes('inpost') ? 'InPost' : defaultCourier);
-        const line2 = friendlyName === attributes.tracking_number ? "" : attributes.tracking_number;
+        
+        const isTrackingName = friendlyName === attributes.tracking_number;
+        let nameClass = "name";
+        let displayFriendlyName = friendlyName;
+
+        if (isTrackingName) {
+            nameClass += " truncate-left";
+            displayFriendlyName = `<span dir="ltr">${friendlyName}</span>`;
+        }
+
+        const line2 = isTrackingName ? "" : attributes.tracking_number;
+        const displayLine2 = line2 ? `<span dir="ltr">${line2}</span>` : "";
 
         const imageUrl = this.getCourierImage(courier);
         const iconMdi = attributes.icon || this.getCourierIcon(courier);
@@ -362,18 +743,16 @@ class ShipmentTrackingCard extends HTMLElement {
         const location = attributes.location || attributes.current_location || '';
         const pickupCode = attributes.open_code || attributes.pickup_code || '';
 
-        let codeHtml = '';
+        let extraInfoHtml = '';
         if (pickupCode) {
-            codeHtml = `<span class="pickup-code">${pickupCodeLabel}: ${pickupCode}</span>`;
+            extraInfoHtml += `<div class="pickup-code">${pickupCodeLabel}: ${pickupCode}</div>`;
         }
-
-        let detailsHtml = '';
         if (location) {
-             detailsHtml = `<span>${pickupPointLabel}: ${location}</span>`;
+             extraInfoHtml += `<div class="extra-info-text">${pickupPointLabel}: ${location}</div>`;
         }
 
         html += `
-          <div class="shipment-item">
+          <div class="shipment-item" data-entity-id="${entityId}">
             <div class="icon-container">
               ${iconHtml}
             </div>
@@ -381,8 +760,8 @@ class ShipmentTrackingCard extends HTMLElement {
             <div class="content-right">
                 <div class="row-top">
                     <div class="info-main">
-                        <div class="name">${friendlyName}</div>
-                        <div class="courier">${line2}</div>
+                        <div class="${nameClass}">${displayFriendlyName}</div>
+                        <div class="courier truncate-left">${displayLine2}</div>
                     </div>
                     <div class="status-badge ${statusInfo.class}">
                         ${statusInfo.text}
@@ -391,7 +770,7 @@ class ShipmentTrackingCard extends HTMLElement {
 
                 <div class="row-bottom">
                     <div class="extra-info">
-                        ${codeHtml}${detailsHtml}
+                        ${extraInfoHtml}
                     </div>
                 </div>
             </div>
@@ -405,6 +784,12 @@ class ShipmentTrackingCard extends HTMLElement {
     }
 
     this.content.innerHTML = html;
+
+    this.content.querySelectorAll('.shipment-item').forEach(item => {
+      item.addEventListener('click', () => {
+        this.openDialog(item.getAttribute('data-entity-id'));
+      });
+    });
   }
 }
 
