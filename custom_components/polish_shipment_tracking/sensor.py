@@ -88,6 +88,7 @@ async def async_setup_entry(
         """Add new sensors and remove old ones."""
         current_data = coordinator.data or []
         new_entities = []
+        registry = async_get_entity_registry(hass)
         
         current_ids = set()
         for parcel in current_data:
@@ -97,6 +98,16 @@ async def async_setup_entry(
             
             current_ids.add(pid)
             if pid not in coordinator.known_parcels:
+                unique_id = f"{coordinator.courier}_{pid}"
+                existing_entity_id = registry.async_get_entity_id("sensor", DOMAIN, unique_id)
+                if existing_entity_id is not None:
+                    coordinator.known_parcels.add(pid)
+                    _LOGGER.debug(
+                        "Skipping duplicate shipment entity for %s (already exists as %s)",
+                        unique_id,
+                        existing_entity_id,
+                    )
+                    continue
                 coordinator.known_parcels.add(pid)
                 new_entities.append(ShipmentSensor(coordinator, parcel, pid))
         
