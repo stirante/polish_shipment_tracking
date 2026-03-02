@@ -101,7 +101,12 @@ async def async_setup_entry(
                 unique_id = f"{coordinator.courier}_{pid}"
                 existing_entity_id = registry.async_get_entity_id("sensor", DOMAIN, unique_id)
                 if existing_entity_id is not None:
-                    coordinator.known_parcels.add(pid)
+                    existing_entry = registry.async_get(existing_entity_id)
+                    if existing_entry and existing_entry.config_entry_id == entry.entry_id:
+                        # Entity belongs to this config entry - still create runtime entity.
+                        coordinator.known_parcels.add(pid)
+                        new_entities.append(ShipmentSensor(coordinator, parcel, pid))
+                        continue
                     _LOGGER.debug(
                         "Skipping duplicate shipment entity for %s (already exists as %s)",
                         unique_id,
