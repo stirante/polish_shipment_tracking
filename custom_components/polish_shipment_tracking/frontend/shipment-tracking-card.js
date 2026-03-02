@@ -178,6 +178,7 @@ class ShipmentTrackingCard extends HTMLElement {
           .info-main {
             min-width: 0;
             flex: 1;
+            overflow: hidden;
           }
           .name {
             font-weight: 600;
@@ -335,9 +336,10 @@ class ShipmentTrackingCard extends HTMLElement {
             box-shadow: 0 4px 8px rgba(0,0,0,0.15); cursor: default;
           }
           .parcel-size span { display: block; background: currentColor; border-radius: 2px; margin-bottom: 6px; opacity: 0.9; }
-          .parcel-size .box-a { width: 26px; height: 8px; }
-          .parcel-size .box-b { width: 26px; height: 18px; }
-          .parcel-size .box-c { width: 26px; height: 32px; }
+          .parcel-size .box-xs { width: 26px; height: 4px; }
+          .parcel-size .box-s { width: 26px; height: 8px; }
+          .parcel-size .box-m { width: 26px; height: 18px; }
+          .parcel-size .box-l { width: 26px; height: 32px; }
           .parcel-size-info { font-size: 0.8rem; color: var(--secondary-text-color); margin-top: 6px; }
 
           .modal-nav-link {
@@ -616,23 +618,33 @@ class ShipmentTrackingCard extends HTMLElement {
         }
 
         if (this._isEnabled("show_dialog_parcel_size") && courier === 'inpost' && raw.parcelSize) {
-          const size = raw.parcelSize.toUpperCase();
-          const inpostDimensions = {
-            'A': '8 x 38 x 64 cm',
-            'B': '19 x 38 x 64 cm',
-            'C': '41 x 38 x 64 cm'
+          const rawSize = raw.parcelSize.toUpperCase();
+          const sizeInfo = {
+            'D': { label: 'XS', dim: '4 x 23 x 40 cm', weight: '3 kg', name: 'Mini' },
+            'A': { label: 'S', dim: '8 x 38 x 64 cm', weight: '25 kg', name: 'Mała' },
+            'E': { label: 'S', dim: '8 x 38 x 64 cm', weight: '25 kg', name: 'Mała' },
+            'H': { label: 'S', dim: '8 x 38 x 64 cm', weight: '25 kg', name: 'Mała' },
+            'B': { label: 'M', dim: '19 x 38 x 64 cm', weight: '25 kg', name: 'Średnia' },
+            'F': { label: 'M', dim: '19 x 38 x 64 cm', weight: '25 kg', name: 'Średnia' },
+            'I': { label: 'M', dim: '19 x 38 x 64 cm', weight: '25 kg', name: 'Średnia' },
+            'C': { label: 'L', dim: '41 x 38 x 64 cm', weight: '25 kg', name: 'Duża' },
+            'G': { label: 'L', dim: '41 x 38 x 64 cm', weight: '25 kg', name: 'Duża' },
+            'J': { label: 'L', dim: '41 x 38 x 64 cm', weight: '25 kg', name: 'Duża' }
           };
-          const currentDim = inpostDimensions[size] || '';
+
+          const sInfo = sizeInfo[rawSize];
+          const activeLabel = sInfo ? sInfo.label : '';
 
           infoHtml += `
             <div style="margin-top: 16px; border-top: 1px solid var(--divider-color, rgba(0,0,0,0.05)); padding-top: 12px;">
               <strong style="display:block; margin-bottom: 4px; color: var(--secondary-text-color);">${this._localize("dialog.parcel_size")}:</strong>
               <div class="parcel-sizes">
-                  <div class="parcel-size ${size === 'A' ? 'active' : ''}" title="Gabaryt A: Max 8 x 38 x 64 cm, do 25 kg"><span class="box-a"></span>A</div>
-                  <div class="parcel-size ${size === 'B' ? 'active' : ''}" title="Gabaryt B: Max 19 x 38 x 64 cm, do 25 kg"><span class="box-b"></span>B</div>
-                  <div class="parcel-size ${size === 'C' ? 'active' : ''}" title="Gabaryt C: Max 41 x 38 x 64 cm, do 25 kg"><span class="box-c"></span>C</div>
+                  <div class="parcel-size ${activeLabel === 'XS' ? 'active' : ''}" title="Gabaryt XS (Mini): Max 4 x 23 x 40 cm, do 3 kg"><span class="box-xs"></span>XS</div>
+                  <div class="parcel-size ${activeLabel === 'S' ? 'active' : ''}" title="Gabaryt S (Mała): Max 8 x 38 x 64 cm, do 25 kg"><span class="box-s"></span>S</div>
+                  <div class="parcel-size ${activeLabel === 'M' ? 'active' : ''}" title="Gabaryt M (Średnia): Max 19 x 38 x 64 cm, do 25 kg"><span class="box-m"></span>M</div>
+                  <div class="parcel-size ${activeLabel === 'L' ? 'active' : ''}" title="Gabaryt L (Duża): Max 41 x 38 x 64 cm, do 25 kg"><span class="box-l"></span>L</div>
               </div>
-              ${currentDim ? `<div class="parcel-size-info">${this._localize("dialog.max_dimensions")}: <strong>${currentDim}</strong> (do 25 kg)</div>` : ''}
+              ${sInfo ? `<div class="parcel-size-info">${this._localize("dialog.max_dimensions")}: <strong>${sInfo.dim}</strong> (do ${sInfo.weight})</div>` : ''}
             </div>`;
         }
 
