@@ -1,4 +1,5 @@
 import aiohttp
+import urllib.parse
 from .api_helpers import normalize_phone, request_json
 
 
@@ -113,3 +114,7 @@ class DhlApi:
                 "page": 1,
             },
         )
+
+    async def get_parcel(self, shipment_number: str):
+        encoded = urllib.parse.quote(str(shipment_number), safe="")
+        return await self.request("GET", f"user/shipment/v2/details/{encoded}")

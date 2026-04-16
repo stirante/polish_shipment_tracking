@@ -125,3 +125,23 @@ class DpdApi:
         }
         payload = {"alias": None, "sent": None}
         return await self.request("POST", url, data=payload, headers=headers)
+
+    async def get_parcel(self, tracking_number: str):
+        encoded = urllib.parse.quote(str(tracking_number), safe="")
+        url = f"{self.API_URL}/mdupackageservices/api/v1/packages/{encoded}"
+        headers = {
+            "X-Mobile-Platform": "android",
+            "X-Mobile-Version": "2.10.2",
+        }
+        return await self.request("GET", url, headers=headers)
+
+    async def get_manage_package_url(self, tracking_number: str):
+        if not tracking_number:
+            raise ValueError("tracking_number is required")
+        encoded = urllib.parse.quote(str(tracking_number), safe="")
+        url = f"{self.API_URL}/mdupackageservices/api/v1/packages/{encoded}/management"
+        headers = {
+            "X-Mobile-Platform": "android",
+            "X-Mobile-Version": "2.10.2",
+        }
+        return await self.request("GET", url, headers=headers)

@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Final
 
 DOMAIN = "polish_shipment_tracking"
-PLATFORMS = ["sensor"]
+PLATFORMS = ["sensor", "button"]
 
 CONF_COURIER = "courier"
 CONF_PHONE = "phone"

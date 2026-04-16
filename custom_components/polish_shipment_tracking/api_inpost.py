@@ -1,4 +1,5 @@
 import aiohttp
+import urllib.parse
 from .api_helpers import normalize_phone, request_json
 
 
@@ -87,3 +88,7 @@ class InPostApi:
 
     async def get_parcels(self):
         return await self.request("GET", "v4/parcels/tracked")
+
+    async def get_parcel(self, shipment_number: str):
+        encoded = urllib.parse.quote(str(shipment_number), safe="")
+        return await self.request("GET", f"v4/parcels/tracked/{encoded}")

@@ -13,6 +13,12 @@ def get_parcel_id(data: dict, courier: str) -> str | None:
         return _pick_pocztex_id(data)
     return None
 
+def get_parcel_detail_id(data: dict, courier: str) -> str | None:
+    """Extract parcel detail endpoint ID from data based on courier."""
+    if courier == "pocztex":
+        return _pick_pocztex_detail_id(data)
+    return get_parcel_id(data, courier)
+
 def _pick_pocztex_id(parcel_data):
     if not parcel_data or not isinstance(parcel_data, dict):
         return None
@@ -27,6 +33,14 @@ def _pick_pocztex_id(parcel_data):
         "id",
     ]
     for key in keys:
+        if key in parcel_data and parcel_data[key] is not None:
+            return str(parcel_data[key])
+    return None
+
+def _pick_pocztex_detail_id(parcel_data):
+    if not parcel_data or not isinstance(parcel_data, dict):
+        return None
+    for key in ("id", "trackingId", "trackingID"):
         if key in parcel_data and parcel_data[key] is not None:
             return str(parcel_data[key])
     return None
