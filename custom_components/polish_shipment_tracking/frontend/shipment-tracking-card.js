@@ -11,16 +11,20 @@ const CARD_TRANSLATIONS = {
     "editor.show_list_pickup_code": "Show pickup code in list",
     "editor.show_list_location": "Show pickup point in list",
     "editor.show_dialog_sender": "Show sender in details",
+    "editor.show_dialog_account_contact": "Show shipment account in details",
     "editor.show_dialog_recipient": "Show recipient in details",
     "editor.show_dialog_pickup_code": "Show pickup code in details",
     "editor.show_dialog_pickup_point": "Show pickup point in details",
     "editor.show_dialog_navigation": "Show navigation link in details",
     "editor.show_dialog_cod": "Show COD amount in details",
+    "editor.show_dialog_delivery_date": "Show planned delivery date in details",
     "editor.show_dialog_parcel_size": "Show parcel size in details",
     "editor.show_dialog_qr_code": "Show QR code in details",
     "editor.show_dialog_timeline": "Show timeline in details",
+    "editor.show_dialog_manage_button": "Show manage button in details",
     "editor.show_dialog_entity_button": "Show entity button in details",
     "dialog.sender": "Sender",
+    "dialog.account_contact": "Shipment For",
     "dialog.recipient": "Recipient",
     "dialog.pickup_code": "Pickup Code",
     "dialog.pickup_point": "Pickup Point",
@@ -28,12 +32,16 @@ const CARD_TRANSLATIONS = {
     "dialog.parcel_size": "Size",
     "dialog.max_dimensions": "Max dimensions",
     "dialog.cod": "COD Amount",
+    "dialog.planned_delivery_date": "Planned Delivery",
     "dialog.courier_name": "Courier Name",
     "dialog.timeline": "Timeline",
     "dialog.no_timeline": "No timeline history available",
     "dialog.scan_qr": "Scan at the parcel locker",
     "dialog.show_entity": "Show entity",
+    "dialog.refresh_shipment": "Refresh shipment",
+    "dialog.manage_shipment": "Manage shipment",
     "dialog.close": "Close",
+    "card.refresh_all": "Refresh all shipments",
     "dpd.DELIVERED": "Delivered",
     "dpd.HANDED_OVER_FOR_DELIVERY": "Out for delivery",
     "dpd.RECEIVED_IN_DEPOT": "Received in depot",
@@ -53,16 +61,20 @@ const CARD_TRANSLATIONS = {
     "editor.show_list_pickup_code": "Pokaż kod odbioru na liście",
     "editor.show_list_location": "Pokaż lokalizację na liście",
     "editor.show_dialog_sender": "Pokaż nadawcę w szczegółach",
+    "editor.show_dialog_account_contact": "Pokaż dane konta przesyłki w szczegółach",
     "editor.show_dialog_recipient": "Pokaż odbiorcę w szczegółach",
     "editor.show_dialog_pickup_code": "Pokaż kod odbioru w szczegółach",
     "editor.show_dialog_pickup_point": "Pokaż punkt odbioru w szczegółach",
     "editor.show_dialog_navigation": "Pokaż link nawigacji w szczegółach",
     "editor.show_dialog_cod": "Pokaż kwotę pobrania w szczegółach",
+    "editor.show_dialog_delivery_date": "Pokaż planowaną datę doręczenia w szczegółach",
     "editor.show_dialog_parcel_size": "Pokaż gabaryt paczki w szczegółach",
     "editor.show_dialog_qr_code": "Pokaż kod QR w szczegółach",
     "editor.show_dialog_timeline": "Pokaż historię przesyłki w szczegółach",
+    "editor.show_dialog_manage_button": "Pokaż przycisk zarządzania w szczegółach",
     "editor.show_dialog_entity_button": "Pokaż przycisk encji w szczegółach",
     "dialog.sender": "Nadawca",
+    "dialog.account_contact": "Przesyłka na",
     "dialog.recipient": "Odbiorca",
     "dialog.pickup_code": "Kod odbioru",
     "dialog.pickup_point": "Punkt odbioru",
@@ -70,12 +82,16 @@ const CARD_TRANSLATIONS = {
     "dialog.parcel_size": "Gabaryt",
     "dialog.max_dimensions": "Maksymalne wymiary",
     "dialog.cod": "Kwota pobrania",
+    "dialog.planned_delivery_date": "Planowane doręczenie",
     "dialog.courier_name": "Kurier",
     "dialog.timeline": "Historia przesyłki",
     "dialog.no_timeline": "Brak historii przesyłki",
     "dialog.scan_qr": "Zeskanuj w paczkomacie",
     "dialog.show_entity": "Pokaż encję",
+    "dialog.refresh_shipment": "Odśwież przesyłkę",
+    "dialog.manage_shipment": "Zarządzaj przesyłką",
     "dialog.close": "Zamknij",
+    "card.refresh_all": "Odśwież wszystkie przesyłki",
     "dpd.DELIVERED": "Dostarczona",
     "dpd.HANDED_OVER_FOR_DELIVERY": "Wydana do doręczenia",
     "dpd.RECEIVED_IN_DEPOT": "Przyjęta w oddziale",
@@ -120,6 +136,41 @@ class ShipmentTrackingCard extends HTMLElement {
             display: flex;
             align-items: center;
             justify-content: space-between;
+          }
+          .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+          }
+          .header-refresh-btn {
+            border: none;
+            background: transparent;
+            color: var(--secondary-text-color);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background-color 0.2s ease, color 0.2s ease, transform 0.1s ease;
+          }
+          .header-refresh-btn:hover {
+            background-color: var(--secondary-background-color);
+            color: var(--primary-color);
+          }
+          .header-refresh-btn:active {
+            transform: scale(0.9);
+          }
+          @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+          .header-refresh-btn.loading ha-icon,
+          .header-icon-btn.loading ha-icon,
+          .manage-btn.loading ha-icon {
+            animation: spin 0.8s linear infinite;
+            transform-origin: center;
           }
           .shipment-list {
             display: flex;
@@ -275,7 +326,25 @@ class ShipmentTrackingCard extends HTMLElement {
             display: flex; justify-content: space-between; align-items: center;
             font-size: 1.2rem; font-weight: 500; background: var(--secondary-background-color);
           }
-          .modal-header ha-icon { cursor: pointer; color: var(--secondary-text-color); }
+          #modal-title {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            margin-right: 12px;
+          }
+          .modal-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+          }
+          .modal-header-actions ha-icon { cursor: pointer; color: var(--secondary-text-color); }
+          .header-icon-btn {
+            background: none; border: none; padding: 0; cursor: pointer;
+            color: var(--secondary-text-color); display: flex; align-items: center;
+            justify-content: center; transition: color 0.2s ease; outline: none;
+          }
+          .header-icon-btn:hover { color: var(--primary-text-color); }
           
           .modal-content { 
             padding: 20px; overflow-y: auto; flex: 1; 
@@ -289,7 +358,7 @@ class ShipmentTrackingCard extends HTMLElement {
           }
           .modal-info-block-row { margin-bottom: 8px; line-height: 1.4; display: flex; align-items: flex-start;}
           .modal-info-block-row:last-child { margin-bottom: 0; }
-          .modal-info-block-row strong { color: var(--secondary-text-color); font-weight: 500; min-width: 100px; flex-shrink: 0; }
+          .modal-info-block-row strong { color: var(--secondary-text-color); font-weight: 500; min-width: 155px; flex-shrink: 0; }
           .modal-info-block-row span.val { flex-grow: 1; }
           
           .qr-code-container {
@@ -348,6 +417,21 @@ class ShipmentTrackingCard extends HTMLElement {
             margin-top: 4px; font-size: 0.9rem;
           }
           .modal-nav-link ha-icon { --mdc-icon-size: 16px; }
+          
+          .manage-shipment-container {
+            margin-bottom: 24px;
+            width: 100%;
+          }
+          .manage-btn {
+            display: flex; align-items: center; justify-content: center; width: 100%;
+            box-sizing: border-box;
+            gap: 8px; border: 1px solid var(--primary-color); background: transparent;
+            color: var(--primary-color); border-radius: 8px; padding: 12px 16px;
+            font-size: 1rem; font-weight: 500; cursor: pointer; transition: all 0.2s ease;
+          }
+          .manage-btn:hover { background: var(--primary-color); color: var(--text-primary-color, white); }
+          .manage-btn ha-icon { --mdc-icon-size: 20px; }
+
           .modal-section-title { font-size: 1.1rem; font-weight: 500; margin-bottom: 12px; color: var(--primary-text-color); }
           .timeline { position: relative; padding-left: 20px; margin-top: 10px; }
           .timeline-item { position: relative; padding-bottom: 20px; }
@@ -366,22 +450,17 @@ class ShipmentTrackingCard extends HTMLElement {
           .timeline-date { font-size: 0.8rem; color: var(--secondary-text-color); margin-bottom: 4px; }
           .timeline-title { font-weight: 500; font-size: 0.95rem; margin-bottom: 2px; }
           .timeline-desc { font-size: 0.85rem; color: var(--secondary-text-color); line-height: 1.4; }
-          .modal-actions { margin-top: 18px; display: flex; justify-content: flex-end; }
-          .modal-action-btn {
-            border: 1px solid var(--primary-color);
-            background: transparent;
-            color: var(--primary-color);
-            border-radius: 8px;
-            padding: 8px 12px;
-            font-weight: 600;
-            cursor: pointer;
-          }
         </style>
 
         <ha-card>
           <div class="header">
             <span id="card-title"></span>
-            <ha-icon icon="mdi:truck-delivery-outline"></ha-icon>
+            <div class="header-actions">
+              <button id="refresh-all-btn" class="header-refresh-btn" type="button" title="">
+                <ha-icon icon="mdi:refresh"></ha-icon>
+              </button>
+              <ha-icon icon="mdi:truck-delivery-outline"></ha-icon>
+            </div>
           </div>
           <div class="shipment-list" id="shipment-list"></div>
         </ha-card>
@@ -390,7 +469,10 @@ class ShipmentTrackingCard extends HTMLElement {
           <div class="modal-surface">
             <div class="modal-header">
               <span id="modal-title"></span>
-              <ha-icon icon="mdi:close" id="modal-close"></ha-icon>
+              <div class="modal-header-actions">
+                <span id="header-dynamic-actions" style="display:flex; gap:12px; align-items:center;"></span>
+                <ha-icon icon="mdi:close" id="modal-close"></ha-icon>
+              </div>
             </div>
             <div class="modal-content" id="modal-content"></div>
           </div>
@@ -403,13 +485,14 @@ class ShipmentTrackingCard extends HTMLElement {
       `;
       this.content = this.querySelector("#shipment-list");
       this.titleElement = this.querySelector("#card-title");
+      this.refreshAllButton = this.querySelector("#refresh-all-btn");
 
       this.querySelector('#modal-close').addEventListener('click', () => {
-        this.querySelector('#modal-overlay').classList.remove('open');
+        this._closeDialog();
       });
       this.querySelector('#modal-overlay').addEventListener('click', (e) => {
         if (e.target.id === 'modal-overlay') {
-          this.querySelector('#modal-overlay').classList.remove('open');
+          this._closeDialog();
         }
       });
       
@@ -421,9 +504,14 @@ class ShipmentTrackingCard extends HTMLElement {
           this.querySelector('#qr-fullscreen').classList.remove('open');
         }
       });
+      this.refreshAllButton.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await this._refreshAllShipments();
+      });
     }
     this._updateTitle();
     this.updateContent();
+    this._refreshOpenDialog();
   }
 
   setConfig(config) {
@@ -452,6 +540,7 @@ class ShipmentTrackingCard extends HTMLElement {
     if (!this.titleElement) return;
     const title = this.config?.title || this._localize("card.title");
     this.titleElement.innerText = title;
+    if (this.refreshAllButton) this.refreshAllButton.title = this._localize("card.refresh_all");
     
     const closeBtn = this.querySelector('#qr-fullscreen-close');
     if (closeBtn) closeBtn.innerText = this._localize("dialog.close");
@@ -459,6 +548,215 @@ class ShipmentTrackingCard extends HTMLElement {
 
   _isEnabled(optionName) {
     return this.config?.[optionName] !== false;
+  }
+
+  _closeDialog() {
+    this._openDialogEntityId = null;
+    this.querySelector('#modal-overlay')?.classList.remove('open');
+  }
+
+  _refreshOpenDialog() {
+    if (!this._openDialogEntityId) return;
+
+    const stateObj = this._hass?.states?.[this._openDialogEntityId];
+    if (!stateObj) {
+      this._closeDialog();
+      return;
+    }
+
+    this.openDialog(this._openDialogEntityId, { reopen: false });
+  }
+
+  _getRefreshAllButtonIds() {
+    if (!this._hass?.states) return [];
+    const byScope = Object.keys(this._hass.states).filter((entityId) => {
+      if (!entityId.startsWith("button.")) return false;
+      const attrs = this._hass.states[entityId]?.attributes || {};
+      return (
+        attrs.integration_domain === "polish_shipment_tracking"
+        && attrs.refresh_scope === "all"
+      );
+    });
+    if (byScope.length) return byScope;
+
+    return Object.keys(this._hass.states).filter((entityId) => (
+      entityId.startsWith("button.")
+      && entityId.includes("_refresh_all")
+    ));
+  }
+
+  _getRefreshShipmentButtonId(attrs) {
+    if (!this._hass?.states || !attrs?.tracking_number || !attrs?.courier) return null;
+    const trackingNumber = String(attrs.tracking_number);
+    const courier = String(attrs.courier).toLowerCase();
+
+    return Object.keys(this._hass.states).find((entityId) => {
+      if (!entityId.startsWith("button.")) return false;
+      const buttonAttrs = this._hass.states[entityId]?.attributes || {};
+      return (
+        buttonAttrs.integration_domain === "polish_shipment_tracking"
+        && buttonAttrs.refresh_scope === "single"
+        && String(buttonAttrs.tracking_number) === trackingNumber
+        && String(buttonAttrs.courier).toLowerCase() === courier
+      );
+    }) || null;
+  }
+
+  _getManageShipmentButtonId(attrs) {
+    if (!this._hass?.states || !attrs?.tracking_number || !attrs?.courier) return null;
+    const trackingNumber = String(attrs.tracking_number);
+    const courier = String(attrs.courier).toLowerCase();
+
+    return Object.keys(this._hass.states).find((entityId) => {
+      if (!entityId.startsWith("button.")) return false;
+      const buttonAttrs = this._hass.states[entityId]?.attributes || {};
+      return (
+        buttonAttrs.integration_domain === "polish_shipment_tracking"
+        && buttonAttrs.action === "manage_url"
+        && String(buttonAttrs.tracking_number) === trackingNumber
+        && String(buttonAttrs.courier).toLowerCase() === courier
+      );
+    }) || null;
+  }
+
+  _hasDpdManageAction(attrs, raw) {
+    const courier = String(attrs?.courier || "").toLowerCase();
+    if (courier !== "dpd" || !raw || typeof raw !== "object") return false;
+    if (raw.is_manageable === true) return true;
+    if (!Array.isArray(raw.user_actions)) return false;
+    return raw.user_actions.some((action) => action?.code === "MANAGE_PACKAGE");
+  }
+
+  async _pressButtonEntity(entityId) {
+    if (!entityId || !this._hass) return;
+    await this._hass.callService("button", "press", { entity_id: entityId });
+  }
+
+  _waitForManageUrl(trackingNumber, courier, timeoutMs = 15000) {
+    if (!this._hass?.connection) {
+      return Promise.reject(new Error("Home Assistant connection unavailable"));
+    }
+
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      let unsubscribe = null;
+      const finish = (handler, value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutId);
+        if (typeof unsubscribe === "function") unsubscribe();
+        handler(value);
+      };
+
+      const timeoutId = window.setTimeout(() => {
+        finish(reject, new Error("Timed out waiting for DPD manage URL"));
+      }, timeoutMs);
+
+      this._hass.connection.subscribeEvents((event) => {
+        const data = event?.data || {};
+        if (String(data.courier || "").toLowerCase() !== String(courier || "").toLowerCase()) return;
+        if (String(data.tracking_number || "") !== String(trackingNumber || "")) return;
+        if (!data.manage_url) {
+          finish(reject, new Error("DPD manage URL missing in event payload"));
+          return;
+        }
+        finish(resolve, data.manage_url);
+      }, "polish_shipment_tracking_manage_url").then((unsub) => {
+        unsubscribe = unsub;
+      }).catch((err) => {
+        finish(reject, err);
+      });
+    });
+  }
+
+  _getManageUrlCache() {
+    if (!this._manageUrlCache) {
+      this._manageUrlCache = new Map();
+    }
+    return this._manageUrlCache;
+  }
+
+  _getManageUrlRequests() {
+    if (!this._manageUrlRequests) {
+      this._manageUrlRequests = new Map();
+    }
+    return this._manageUrlRequests;
+  }
+
+  _getManageCacheKey(attrs) {
+    if (!attrs?.tracking_number || !attrs?.courier) return null;
+    return `${String(attrs.courier).toLowerCase()}::${String(attrs.tracking_number)}`;
+  }
+
+  _getCachedManageUrl(attrs) {
+    const key = this._getManageCacheKey(attrs);
+    if (!key) return null;
+    return this._getManageUrlCache().get(key) || null;
+  }
+
+  _isManageUrlPending(attrs) {
+    const key = this._getManageCacheKey(attrs);
+    if (!key) return false;
+    return this._getManageUrlRequests().has(key);
+  }
+
+  _prefetchManageShipmentUrl(buttonEntityId, attrs, entityId) {
+    const key = this._getManageCacheKey(attrs);
+    if (!key || !buttonEntityId) return;
+    if (this._getManageUrlCache().has(key) || this._getManageUrlRequests().has(key)) return;
+
+    const request = (async () => {
+      try {
+        const waitPromise = this._waitForManageUrl(attrs.tracking_number, attrs.courier);
+        await this._pressButtonEntity(buttonEntityId);
+        const manageUrl = await waitPromise;
+        if (manageUrl) {
+          this._getManageUrlCache().set(key, manageUrl);
+          if (this._openDialogEntityId === entityId) {
+            this.openDialog(entityId, { reopen: false });
+          }
+        }
+      } catch (err) {
+        console.error("Failed to prefetch DPD manage URL", err);
+      } finally {
+        this._getManageUrlRequests().delete(key);
+        if (this._openDialogEntityId === entityId) {
+          this.openDialog(entityId, { reopen: false });
+        }
+      }
+    })();
+
+    this._getManageUrlRequests().set(key, request);
+  }
+
+  _openExternalUrl(url) {
+    if (!url) return;
+    const link = document.createElement("a");
+    link.href = url;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  async _openManageShipment(attrs) {
+    const manageUrl = this._getCachedManageUrl(attrs);
+    if (manageUrl) {
+      this._openExternalUrl(manageUrl);
+    }
+  }
+
+  async _refreshAllShipments() {
+    const refreshIds = this._getRefreshAllButtonIds();
+    if (!refreshIds.length) return;
+    if (this.refreshAllButton) this.refreshAllButton.classList.add("loading");
+    try {
+      await Promise.all(refreshIds.map((entityId) => this._pressButtonEntity(entityId)));
+    } finally {
+      setTimeout(() => this.refreshAllButton?.classList.remove("loading"), 400);
+    }
   }
 
   getStatusInfo(stateObj) {
@@ -482,14 +780,14 @@ class ShipmentTrackingCard extends HTMLElement {
     const badgeClass = classMap[statusKey] || 'status-pending';
 
     let label = state || raw || statusKey || '';
-    if (this._hass?.formatEntityState && stateObj) {
-      label = this._hass.formatEntityState(stateObj);
-    } else if (this._hass?.localize && statusKey) {
+    if (this._hass?.localize && statusKey) {
       const key = `component.polish_shipment_tracking.entity.sensor.shipment_status.state.${statusKey}`;
       const localized = this._hass.localize(key);
       if (localized && localized !== key) {
         label = localized;
       }
+    } else if (this._hass?.formatEntityState && stateObj) {
+      label = this._hass.formatEntityState(stateObj);
     }
 
     return { class: badgeClass, text: label };
@@ -522,9 +820,11 @@ class ShipmentTrackingCard extends HTMLElement {
     return null;
   }
 
-  openDialog(entityId) {
+  openDialog(entityId, options = {}) {
+    const { reopen = true } = options;
     const stateObj = this._hass.states[entityId];
     if (!stateObj) return;
+    this._openDialogEntityId = entityId;
 
     const attrs = stateObj.attributes;
     const rawStr = attrs.raw_response;
@@ -532,6 +832,53 @@ class ShipmentTrackingCard extends HTMLElement {
     
     this.querySelector('#modal-title').innerText = friendlyName;
 
+    // Header Actions Check
+    const refreshShipmentButtonId = this._getRefreshShipmentButtonId(attrs);
+    let headerActionsHtml = '';
+    
+    if (this._isEnabled("show_dialog_entity_button")) {
+      headerActionsHtml += `<button class="header-icon-btn" data-entity-button="${entityId}" title="${this._localize("dialog.show_entity")}"><ha-icon icon="mdi:information-outline"></ha-icon></button>`;
+    }
+    if (refreshShipmentButtonId) {
+      headerActionsHtml += `<button class="header-icon-btn" data-refresh-button="${refreshShipmentButtonId}" title="${this._localize("dialog.refresh_shipment")}"><ha-icon icon="mdi:refresh"></ha-icon></button>`;
+    }
+    const headerDynamicContainer = this.querySelector('#header-dynamic-actions');
+    if (headerDynamicContainer) {
+      headerDynamicContainer.innerHTML = headerActionsHtml;
+    }
+
+    // Bind Header Listeners
+    const entityBtn = this.querySelector('[data-entity-button]');
+    if (entityBtn) {
+      entityBtn.addEventListener('click', () => {
+        this._closeDialog();
+        this.dispatchEvent(new CustomEvent("hass-more-info", {
+          detail: { entityId },
+          bubbles: true,
+          composed: true
+        }));
+      });
+    }
+
+    const refreshBtn = this.querySelector('[data-refresh-button]');
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', async () => {
+        const refreshEntityId = refreshBtn.getAttribute('data-refresh-button');
+        if (!refreshEntityId) return;
+        
+        refreshBtn.classList.add('loading');
+        
+        try {
+            await this._pressButtonEntity(refreshEntityId);
+        } finally {
+            setTimeout(() => {
+                refreshBtn.classList.remove('loading');
+            }, 400);
+        }
+      });
+    }
+
+    // Modal Content
     let infoHtml = `<div class="modal-info-block">`;
     
     if (attrs.tracking_number) {
@@ -543,6 +890,9 @@ class ShipmentTrackingCard extends HTMLElement {
     if (this._isEnabled("show_dialog_sender") && (attrs.sender || attrs.sender_name)) {
       infoHtml += `<div class="modal-info-block-row"><strong>${this._localize("dialog.sender")}:</strong> <span class="val">${attrs.sender || attrs.sender_name}</span></div>`;
     }
+    if (this._isEnabled("show_dialog_account_contact") && attrs.account_contact) {
+      infoHtml += `<div class="modal-info-block-row"><strong>${this._localize("dialog.account_contact")}:</strong> <span class="val">${attrs.account_contact}</span></div>`;
+    }
     if (this._isEnabled("show_dialog_recipient") && attrs.recipient_name) {
       infoHtml += `<div class="modal-info-block-row"><strong>${this._localize("dialog.recipient")}:</strong> <span class="val">${attrs.recipient_name}</span></div>`;
     }
@@ -551,11 +901,13 @@ class ShipmentTrackingCard extends HTMLElement {
     }
     
     let timelineHtml = '';
+    let manageShipmentAvailable = false;
     
     if (rawStr) {
       try {
         const raw = JSON.parse(rawStr);
         const courier = (attrs.courier || (entityId.includes('inpost') ? 'inpost' : '')).toLowerCase();
+        manageShipmentAvailable = this._hasDpdManageAction(attrs, raw);
         const locale = this._hass.language || 'pl';
         const formatDateTime = (value) => {
           if (!value) return '';
@@ -571,6 +923,13 @@ class ShipmentTrackingCard extends HTMLElement {
         if (this._isEnabled("show_dialog_cod") && courier === 'pocztex' && (raw.amount !== null || raw.paymentAmount !== null)) {
           const amountStr = (raw.amount !== null ? raw.amount : raw.paymentAmount) + ' zł';
           infoHtml += `<div class="modal-info-block-row"><strong>${this._localize("dialog.cod")}:</strong> <span class="val">${amountStr}</span></div>`;
+        }
+
+        if (this._isEnabled("show_dialog_delivery_date") && courier === 'dpd') {
+          const plannedDeliveryDate = raw.delivery?.planned_delivery_date || raw.planned_delivery_date;
+          if (plannedDeliveryDate) {
+            infoHtml += `<div class="modal-info-block-row"><strong>${this._localize("dialog.planned_delivery_date")}:</strong> <span class="val">${plannedDeliveryDate}</span></div>`;
+          }
         }
 
         let locationName = attrs.location || attrs.current_location;
@@ -633,19 +992,28 @@ class ShipmentTrackingCard extends HTMLElement {
           };
 
           const sInfo = sizeInfo[rawSize];
-          const activeLabel = sInfo ? sInfo.label : '';
 
-          infoHtml += `
-            <div style="margin-top: 16px; border-top: 1px solid var(--divider-color, rgba(0,0,0,0.05)); padding-top: 12px;">
-              <strong style="display:block; margin-bottom: 4px; color: var(--secondary-text-color);">${this._localize("dialog.parcel_size")}:</strong>
-              <div class="parcel-sizes">
-                  <div class="parcel-size ${activeLabel === 'XS' ? 'active' : ''}" title="Gabaryt XS (Mini): Max 4 x 23 x 40 cm, do 3 kg"><span class="box-xs"></span>XS</div>
-                  <div class="parcel-size ${activeLabel === 'S' ? 'active' : ''}" title="Gabaryt S (Mała): Max 8 x 38 x 64 cm, do 25 kg"><span class="box-s"></span>S</div>
-                  <div class="parcel-size ${activeLabel === 'M' ? 'active' : ''}" title="Gabaryt M (Średnia): Max 19 x 38 x 64 cm, do 25 kg"><span class="box-m"></span>M</div>
-                  <div class="parcel-size ${activeLabel === 'L' ? 'active' : ''}" title="Gabaryt L (Duża): Max 41 x 38 x 64 cm, do 25 kg"><span class="box-l"></span>L</div>
-              </div>
-              ${sInfo ? `<div class="parcel-size-info">${this._localize("dialog.max_dimensions")}: <strong>${sInfo.dim}</strong> (do ${sInfo.weight})</div>` : ''}
-            </div>`;
+          if (sInfo) {
+            const activeLabel = sInfo.label;
+
+            infoHtml += `
+              <div style="margin-top: 16px; border-top: 1px solid var(--divider-color, rgba(0,0,0,0.05)); padding-top: 12px;">
+                <strong style="display:block; margin-bottom: 4px; color: var(--secondary-text-color);">${this._localize("dialog.parcel_size")}:</strong>
+                <div class="parcel-sizes">
+                    <div class="parcel-size ${activeLabel === 'XS' ? 'active' : ''}" title="Gabaryt XS (Mini): Max 4 x 23 x 40 cm, do 3 kg"><span class="box-xs"></span>XS</div>
+                    <div class="parcel-size ${activeLabel === 'S' ? 'active' : ''}" title="Gabaryt S (Mala): Max 8 x 38 x 64 cm, do 25 kg"><span class="box-s"></span>S</div>
+                    <div class="parcel-size ${activeLabel === 'M' ? 'active' : ''}" title="Gabaryt M (Srednia): Max 19 x 38 x 64 cm, do 25 kg"><span class="box-m"></span>M</div>
+                    <div class="parcel-size ${activeLabel === 'L' ? 'active' : ''}" title="Gabaryt L (Duza): Max 41 x 38 x 64 cm, do 25 kg"><span class="box-l"></span>L</div>
+                </div>
+                <div class="parcel-size-info">${this._localize("dialog.max_dimensions")}: <strong>${sInfo.dim}</strong> (do ${sInfo.weight})</div>
+              </div>`;
+          } else {
+            infoHtml += `
+              <div class="modal-info-block-row">
+                <strong>${this._localize("dialog.parcel_size")}:</strong>
+                <span class="val"><span dir="ltr">${rawSize}</span></span>
+              </div>`;
+          }
         }
 
         if (courier === 'inpost' && raw.events && raw.events.length > 0) {
@@ -669,7 +1037,7 @@ class ShipmentTrackingCard extends HTMLElement {
               </div>`;
           });
         } else if (courier === 'pocztex' && Array.isArray(raw.history) && raw.history.length > 0) {
-          raw.history.forEach(event => {
+          [...raw.history].reverse().forEach(event => {
             const dateStr = formatDateTime(event.date);
             const title = event.state || event.stateCode || '';
             timelineHtml += `
@@ -690,7 +1058,33 @@ class ShipmentTrackingCard extends HTMLElement {
 
     infoHtml += `</div>`;
 
+    const manageShipmentButtonId = this._isEnabled("show_dialog_manage_button") && manageShipmentAvailable
+      ? this._getManageShipmentButtonId(attrs)
+      : null;
+    const manageShipmentUrl = this._getCachedManageUrl(attrs);
+    const manageShipmentPending = manageShipmentButtonId && !manageShipmentUrl && this._isManageUrlPending(attrs);
+      
     let finalHtml = infoHtml;
+    
+    if (manageShipmentButtonId) {
+      this._prefetchManageShipmentUrl(manageShipmentButtonId, attrs, entityId);
+      finalHtml += `
+        <div class="manage-shipment-container">
+          ${manageShipmentUrl ? `
+          <a href="${manageShipmentUrl}" target="_blank" rel="noopener noreferrer" class="manage-btn" data-manage-link="true">
+            <ha-icon icon="mdi:open-in-new"></ha-icon>
+            <span>${this._localize("dialog.manage_shipment")}</span>
+          </a>
+          ` : `
+          <button type="button" class="manage-btn ${manageShipmentPending ? 'loading' : ''}" disabled>
+            <ha-icon icon="mdi:open-in-new"></ha-icon>
+            <span>${this._localize("dialog.manage_shipment")}</span>
+          </button>
+          `}
+        </div>
+      `;
+    }
+    
     if (this._isEnabled("show_dialog_timeline")) {
       finalHtml += `<div class="modal-section-title">${this._localize("dialog.timeline")}</div>`;
       if (timelineHtml) {
@@ -698,15 +1092,6 @@ class ShipmentTrackingCard extends HTMLElement {
       } else {
         finalHtml += `<div class="timeline-desc">${this._localize("dialog.no_timeline")}</div>`;
       }
-    }
-    if (this._isEnabled("show_dialog_entity_button")) {
-      finalHtml += `
-        <div class="modal-actions">
-          <button type="button" class="modal-action-btn" data-entity-button="${entityId}">
-            ${this._localize("dialog.show_entity")}
-          </button>
-        </div>
-      `;
     }
 
     const modalContent = this.querySelector('#modal-content');
@@ -721,19 +1106,10 @@ class ShipmentTrackingCard extends HTMLElement {
         fullscreenOverlay.classList.add('open');
       });
     }
-    const entityButton = modalContent.querySelector('[data-entity-button]');
-    if (entityButton) {
-      entityButton.addEventListener('click', () => {
-        this.querySelector('#modal-overlay').classList.remove('open');
-        this.dispatchEvent(new CustomEvent("hass-more-info", {
-          detail: { entityId },
-          bubbles: true,
-          composed: true
-        }));
-      });
-    }
 
-    this.querySelector('#modal-overlay').classList.add('open');
+    if (reopen) {
+      this.querySelector('#modal-overlay').classList.add('open');
+    }
   }
 
   updateContent() {
@@ -784,6 +1160,7 @@ class ShipmentTrackingCard extends HTMLElement {
     ].join('|');
     const signature = `${configSignature}||${signatureParts.join('||')}`;
     if (this._lastSignature === signature) {
+      this._refreshOpenDialog();
       return;
     }
     this._lastSignature = signature;
@@ -878,6 +1255,8 @@ class ShipmentTrackingCard extends HTMLElement {
         this.openDialog(item.getAttribute('data-entity-id'));
       });
     });
+
+    this._refreshOpenDialog();
   }
 }
 
@@ -929,6 +1308,11 @@ class ShipmentTrackingCardEditor extends HTMLElement {
         selector: { boolean: {} }
       },
       {
+        name: "show_dialog_account_contact",
+        label: this._localize("editor.show_dialog_account_contact"),
+        selector: { boolean: {} }
+      },
+      {
         name: "show_dialog_recipient",
         label: this._localize("editor.show_dialog_recipient"),
         selector: { boolean: {} }
@@ -954,6 +1338,11 @@ class ShipmentTrackingCardEditor extends HTMLElement {
         selector: { boolean: {} }
       },
       {
+        name: "show_dialog_delivery_date",
+        label: this._localize("editor.show_dialog_delivery_date"),
+        selector: { boolean: {} }
+      },
+      {
         name: "show_dialog_parcel_size",
         label: this._localize("editor.show_dialog_parcel_size"),
         selector: { boolean: {} }
@@ -969,6 +1358,11 @@ class ShipmentTrackingCardEditor extends HTMLElement {
         selector: { boolean: {} }
       },
       {
+        name: "show_dialog_manage_button",
+        label: this._localize("editor.show_dialog_manage_button"),
+        selector: { boolean: {} }
+      },
+      {
         name: "show_dialog_entity_button",
         label: this._localize("editor.show_dialog_entity_button"),
         selector: { boolean: {} }
@@ -980,14 +1374,17 @@ class ShipmentTrackingCardEditor extends HTMLElement {
       "show_list_pickup_code",
       "show_list_location",
       "show_dialog_sender",
+      "show_dialog_account_contact",
       "show_dialog_recipient",
       "show_dialog_pickup_code",
       "show_dialog_pickup_point",
       "show_dialog_navigation",
       "show_dialog_cod",
+      "show_dialog_delivery_date",
       "show_dialog_parcel_size",
       "show_dialog_qr_code",
       "show_dialog_timeline",
+      "show_dialog_manage_button",
       "show_dialog_entity_button"
     ];
     booleanDefaults.forEach((key) => {

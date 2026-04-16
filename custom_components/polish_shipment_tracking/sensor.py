@@ -82,10 +82,12 @@ async def async_setup_entry(
             "status_key": normalize_status(raw_status, coordinator.courier),
         }
 
+    has_initialized = False
 
     @callback
     def async_update_parcels() -> None:
         """Add new sensors and remove old ones."""
+        nonlocal has_initialized
         current_data = coordinator.data or []
         new_entities = []
         registry = async_get_entity_registry(hass)
@@ -120,18 +122,20 @@ async def async_setup_entry(
             async_add_entities(new_entities)
             # Fire events for newly detected shipments.
             # If HA isn't running yet, queue and flush after startup.
-            for new_sensor in new_entities:
-                _queue_or_fire_event(
-                    hass,
-                    f"{DOMAIN}_new_shipment",
-                    _build_new_shipment_event_data(new_sensor),
-                )
+            if has_initialized:
+                for new_sensor in new_entities:
+                    _queue_or_fire_event(
+                        hass,
+                        f"{DOMAIN}_new_shipment",
+                        _build_new_shipment_event_data(new_sensor),
+                    )
 
         # Remove entities that are no longer present
         _async_remove_old_entities(hass, entry, coordinator, current_ids)
         
         # Keep track of active parcels for this coordinator
         coordinator.known_parcels.intersection_update(current_ids)
+        has_initialized = True
 
     entry.async_on_unload(coordinator.async_add_listener(async_update_parcels))
     async_update_parcels()
@@ -206,6 +210,7 @@ class ShipmentSensor(CoordinatorEntity[ShipmentCoordinator], SensorEntity):
             "courier": self._courier,
             "tracking_number": self._tracking_number,
             "integration_domain": DOMAIN,
+            "account_contact": self._get_account_contact(),
         }
         
         raw_status = get_raw_status(self.parcel_data, self._courier)
@@ -227,6 +232,13 @@ class ShipmentSensor(CoordinatorEntity[ShipmentCoordinator], SensorEntity):
             self._add_pocztex_attributes(attrs)
             
         return attrs
+
+    def _get_account_contact(self) -> str | None:
+        """Return the integration account identifier shown to the carrier."""
+        entry_data = self.coordinator.entry.data
+        if self._courier == "pocztex":
+            return entry_data.get(CONF_EMAIL)
+        return entry_data.get(CONF_PHONE) or entry_data.get(CONF_EMAIL)
 
     def _add_inpost_attributes(self, attrs: dict) -> None:
         """Add InPost specific attributes."""
