@@ -1,6 +1,24 @@
 import aiohttp
+import base64
+import hashlib
+import json
 import urllib.parse
 from .api_helpers import normalize_phone, request_json
+
+
+def _extract_access_token(data: dict) -> str | None:
+    """Pull the access JWT out of a DHL auth response.
+
+    Current schema (2026-06): {"token": {"token": "<jwt>", "refresh": ..., "expires": ...}}.
+    Older schemas exposed it as `accessToken` either at the top level or nested under `data`.
+    The fallbacks keep the integration resilient if DHL flips the shape again.
+    """
+    if not isinstance(data, dict):
+        return None
+    token_obj = data.get("token")
+    if isinstance(token_obj, dict) and token_obj.get("token"):
+        return token_obj["token"]
+    return data.get("accessToken") or data.get("data", {}).get("accessToken")
 
 
 class DhlApi:
@@ -48,14 +66,41 @@ class DhlApi:
             on_response=_capture_cookies,
         )
 
+    async def _solve_altcha(self) -> str:
+        """Fetch a fresh Altcha PoW challenge, solve it, return base64-encoded payload.
+
+        DHL gates auth/* endpoints with Altcha (https://altcha.org). Each request needs
+        its own single-use solution; reusing a challenge across calls is rejected.
+        """
+        challenge = await self.request("GET", "auth/captcha/challenge")
+        target = challenge["challenge"]
+        salt = challenge["salt"]
+        algorithm = challenge.get("algorithm", "SHA-256")
+        if algorithm != "SHA-256":
+            raise Exception(f"DHL Altcha: unsupported algorithm {algorithm}")
+        for n in range(challenge["maxnumber"] + 1):
+            if hashlib.sha256(f"{salt}{n}".encode()).hexdigest() == target:
+                return base64.b64encode(json.dumps({
+                    "algorithm": algorithm,
+                    "challenge": target,
+                    "number": n,
+                    "salt": salt,
+                    "signature": challenge["signature"],
+                }).encode()).decode()
+        raise Exception("DHL Altcha: no PoW solution within maxnumber range")
+
     async def validate_account(self, phone):
         return await self.request(
             "POST",
             "auth/validate-account",
-            {"phoneNumber": normalize_phone(phone), "prefix": "48", "captcha-payload": " "},
+            {
+                "phoneNumber": normalize_phone(phone),
+                "prefix": "48",
+                "captcha-payload": await self._solve_altcha(),
+            },
         )
 
-    async def generate_code(self, phone, captcha_payload=" "):
+    async def generate_code(self, phone):
         return await self.request(
             "POST",
             "auth/generate-code",
@@ -63,7 +108,7 @@ class DhlApi:
                 "phoneNumber": normalize_phone(phone),
                 "prefix": "48",
                 "isMobileDevice": False,
-                "captcha-payload": captcha_payload,
+                "captcha-payload": await self._solve_altcha(),
             },
         )
 
@@ -78,10 +123,10 @@ class DhlApi:
                 "deviceId": device_id,
                 "deviceName": "HomeAssistant",
                 "rememberMe": True,
-                "captcha-payload": " ",
+                "captcha-payload": await self._solve_altcha(),
             },
         )
-        self._token = data.get("accessToken") or data.get("data", {}).get("accessToken")
+        self._token = _extract_access_token(data)
         return data
 
     async def refresh_token(self):
@@ -99,7 +144,7 @@ class DhlApi:
 
         data = await self.request("POST", "auth/recover", data=payload)
 
-        new_token = data.get("accessToken") or data.get("data", {}).get("accessToken")
+        new_token = _extract_access_token(data)
         if new_token:
             self._token = new_token
         return data

@@ -205,13 +205,12 @@ class ShipmentTrackingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 elif self.courier == "dhl":
                     from .api_dhl import DhlApi
                     api = DhlApi(session)
-                    data = await api.validate_code(self.phone, code, self.device_uid)
-                    token = data.get("accessToken") or data.get("data", {}).get("accessToken")
-                    
+                    await api.validate_code(self.phone, code, self.device_uid)
+
                     # Persist cookies so they survive restarts.
                     cookies_json = json.dumps(api._cookies)
                     tokens = {
-                        CONF_TOKEN: token,
+                        CONF_TOKEN: api._token,
                         "cookies": cookies_json
                     }
 
