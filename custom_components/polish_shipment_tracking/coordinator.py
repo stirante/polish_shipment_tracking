@@ -4,6 +4,8 @@ import logging
 import json
 import time
 
+import aiohttp
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -35,14 +37,18 @@ class ShipmentCoordinator(DataUpdateCoordinator):
         self.courier = entry.data[CONF_COURIER]
         self.known_parcels = set()
         self.add_entities_callback = None
-        
+        # Per-account session owned by this coordinator (DHL only). DHL auth is
+        # cookie-based, so accounts must NOT share HA's global cookie jar or one
+        # account's access-token cookie bleeds into the other's requests.
+        self._owned_session: aiohttp.ClientSession | None = None
+
         super().__init__(
             hass,
             _LOGGER,
             name=f"Shipment Tracking {self.courier}",
             update_interval=timedelta(minutes=15),
         )
-        
+
         self.session = async_get_clientsession(hass)
         self.api = self._get_api_instance()
 
@@ -70,9 +76,14 @@ class ShipmentCoordinator(DataUpdateCoordinator):
             
         elif self.courier == "dhl":
             from .api_dhl import DhlApi
-            api = DhlApi(self.session, device_id=device_uid)
+            # Isolated session with a dummy cookie jar so this account's DHL
+            # cookies never leak into (or get overwritten by) another account
+            # sharing HA's global session. Cookies are carried explicitly by
+            # DhlApi via the Cookie header / self._cookies instead.
+            self._owned_session = aiohttp.ClientSession(cookie_jar=aiohttp.DummyCookieJar())
+            api = DhlApi(self._owned_session, device_id=device_uid)
             api._token = token
-            
+
             cookies_json = data.get("cookies")
             if cookies_json:
                 try:
@@ -93,7 +104,12 @@ class ShipmentCoordinator(DataUpdateCoordinator):
 
         elif self.courier == "gls":
             from .api_gls import GlsApi
-            api = GlsApi(self.session, session_id=data.get(CONF_SESSION_ID))
+            # GLS is cookie-based too (manages self._cookies via the Cookie
+            # header, like its DummyCookieJar login). Give each account its own
+            # session so cookies don't bleed between GLS accounts on HA's shared
+            # jar (same isolation as DHL).
+            self._owned_session = aiohttp.ClientSession(cookie_jar=aiohttp.DummyCookieJar())
+            api = GlsApi(self._owned_session, session_id=data.get(CONF_SESSION_ID))
             api._token = token
             api._refresh_token = refresh_token
             api._id_token = data.get(CONF_ID_TOKEN)
@@ -158,7 +174,10 @@ class ShipmentCoordinator(DataUpdateCoordinator):
             
         elif self.courier == "dhl":
             data = await self.api.get_parcels()
-            return data.get("shipments", [])
+            parcels = data.get("shipments", [])
+            if not parcels:
+                return []
+            return await self._enrich_dhl_parcels(parcels)
 
         elif self.courier == "pocztex":
             data = await self.api.get_parcels()
@@ -293,6 +312,62 @@ class ShipmentCoordinator(DataUpdateCoordinator):
             else:
                 enriched.append(result)
         return enriched
+
+    async def _enrich_dhl_parcels(self, parcels):
+        """Fetch DHL parcel details to expose step/timeline/date fields.
+
+        The list endpoint only returns a status summary; the per-shipment
+        detail endpoint carries the step text, milestone labels and dates the
+        card needs to render a timeline.
+        """
+        semaphore = asyncio.Semaphore(5)
+
+        async def _fetch_details(parcel):
+            if not isinstance(parcel, dict):
+                return parcel
+
+            tracking_number = get_parcel_id(parcel, self.courier)
+            if not tracking_number:
+                return parcel
+
+            try:
+                async with semaphore:
+                    details = await self.api.get_parcel(tracking_number)
+            except Exception as err:
+                _LOGGER.debug(
+                    "Failed to fetch DHL parcel details for %s, keeping list payload: %s",
+                    tracking_number,
+                    err,
+                )
+                return parcel
+
+            detail_parcel = self._extract_single_parcel(details, tracking_number)
+            if not isinstance(detail_parcel, dict):
+                return parcel
+
+            merged = dict(parcel)
+            merged.update(detail_parcel)
+            merged["_raw_response"] = detail_parcel
+            return merged
+
+        details_results = await asyncio.gather(
+            *(_fetch_details(parcel) for parcel in parcels),
+            return_exceptions=True,
+        )
+
+        enriched = []
+        for parcel, result in zip(parcels, details_results):
+            if isinstance(result, Exception):
+                enriched.append(parcel)
+            else:
+                enriched.append(result)
+        return enriched
+
+    async def async_close(self) -> None:
+        """Close any session owned by this coordinator (DHL isolated session)."""
+        if self._owned_session is not None:
+            await self._owned_session.close()
+            self._owned_session = None
 
     def _get_gls_tracking_uid(self, shipment_no: str) -> str | None:
         """Return the trackingUid for a GLS shipment identified by shipmentNo."""

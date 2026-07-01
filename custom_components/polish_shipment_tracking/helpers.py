@@ -56,22 +56,25 @@ def get_raw_status(parcel_data: dict, courier: str) -> str | None:
     if courier == "dpd":
         return (parcel_data.get("main_status") or {}).get("status")
     if courier == "dhl":
-        status = parcel_data.get("status")
-        status_text = str(status or "").strip()
-        if status_text:
-            status_upper = status_text.upper()
-            # Keep detailed DHL status as primary source.
-            # If a new TT_* code appears and is not mapped yet,
-            # fall back to timeline status (Route/Delivery/etc.).
-            if status_upper in _STATUS_MAP.get("dhl", {}) or not status_upper.startswith("TT_"):
-                return status_text
-
+        # DHL exposes two status signals: the coarse TT_* code (`status`) and the
+        # fine-grained timeline label (`menuTimelineLabel.status`). The TT_* code is
+        # ambiguous around the delivery phase — e.g. TT_LK covers both "courier out
+        # for delivery" and "on the way to / ready at a POP/BOX point" — while the
+        # timeline label distinguishes Delivery / DeliveryToPoint / DeliveredToPoint
+        # / RetrievedFromPoint. Prefer the timeline label so the status tracks the
+        # DHL app, but let the TT_* code win for problem states (exception /
+        # returned / cancelled), which the timeline label does not surface.
+        tt = str(parcel_data.get("status") or "").strip()
         timeline = parcel_data.get("menuTimelineLabel")
+        menu_status = ""
         if isinstance(timeline, dict):
-            timeline_status = str(timeline.get("status") or "").strip()
-            if timeline_status:
-                return timeline_status
-        return status_text or None
+            menu_status = str(timeline.get("status") or "").strip()
+
+        if tt and normalize_status(tt, "dhl") in ("exception", "returned", "cancelled"):
+            return tt
+        if menu_status and normalize_status(menu_status, "dhl") != "unknown":
+            return menu_status
+        return tt or menu_status or None
     if courier == "pocztex":
         return _pick_pocztex_status(parcel_data)
     if courier == "gls":
@@ -233,7 +236,11 @@ _STATUS_MAP = {
         "TT_DWP_INT": "handed_out_for_delivery",
         "TT_DWP": "handed_out_for_delivery",
         "TT_MAG_INT": "in_transport",
-        "TT_LK": "waiting_for_pickup",
+        # TT_LK (internalStatus MAGLK) is DHL's "out for delivery" state — the
+        # courier is en route, or the parcel is on its way to a POP/BOX point
+        # (timelineStep/menuTimelineLabel = "Delivery"). It is NOT "ready to
+        # collect at the point"; that is TT_AWI (awizo) below.
+        "TT_LK": "handed_out_for_delivery",
         "TT_AWI": "waiting_for_pickup",
         "TT_OP": "delivered",
         "TT_DELAY_KUR": "exception",

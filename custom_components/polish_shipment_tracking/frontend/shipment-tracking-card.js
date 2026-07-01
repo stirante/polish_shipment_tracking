@@ -385,8 +385,9 @@ class ShipmentTrackingCard extends HTMLElement {
             display: flex; flex-direction: column; align-items: center; justify-content: center;
             background: #ffffff; padding: 16px; border-radius: 12px; margin-top: 16px;
             border: 2px solid var(--primary-color); cursor: pointer;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1); transition: transform 0.2s;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1); transition: transform 0.2s, box-shadow 0.2s;
           }
+          .qr-code-container:hover { transform: scale(1.08); box-shadow: 0 8px 22px rgba(0,0,0,0.18); }
           .qr-code-container:active { transform: scale(0.98); }
           .qr-code-container img {
             width: 150px; height: 150px; image-rendering: crisp-edges;
@@ -1142,6 +1143,45 @@ class ShipmentTrackingCard extends HTMLElement {
                   ${packageLine}
                 </div>`;
             });
+        } else if (courier === 'dhl') {
+          // DHL exposes no event log — synthesize a timeline from its 4-stage
+          // step model + milestone dates. All DHL text is Polish (api_dhl
+          // requests Accept-Language: pl-PL), so synthesized labels match.
+          const eta = (raw.menuTimelineLabel && raw.menuTimelineLabel.dateUtc) || raw.deliveryDateUtc || null;
+          const statusKey = (attrs.status_key || '').toString();
+          const delivered = ['delivered', 'returned', 'cancelled'].includes(statusKey);
+
+          const stages = [
+            { title: 'Nadana', date: raw.dateOfPostingUtc || raw.shipmentDateUtc || '' },
+            { title: 'W transporcie', date: '' },
+            { title: raw.timelineStep3Label || 'W doręczeniu', date: '' },
+            { title: raw.timelineStep4Label || 'Odebrana', date: delivered ? (raw.deliveryDateUtc || '') : '' },
+          ];
+
+          let cur = 0;
+          if (statusKey === 'in_transport') cur = 1;
+          else if (statusKey === 'handed_out_for_delivery' || statusKey === 'waiting_for_pickup') cur = 2;
+          else if (delivered) cur = 3;
+
+          // The current stage carries DHL's rich step text + description.
+          if (raw.step) stages[cur].title = raw.step;
+          stages[cur].desc = raw.description || '';
+          // Hang the ETA on the final (collected) milestone when still in transit.
+          if (!delivered && eta && cur < 3 && !stages[3].date) stages[3].date = eta;
+
+          // Render newest (most advanced) first, like the other couriers.
+          for (let i = stages.length - 1; i >= 0; i--) {
+            const st = stages[i];
+            const reached = i <= cur;
+            const isEta = (i === 3 && !delivered && !!st.date);
+            const dateStr = st.date ? (formatDateTime(st.date) + (isEta ? ' (przewidywane)' : '')) : '';
+            timelineHtml += `
+              <div class="timeline-item" style="${reached ? '' : 'opacity:0.55;'}">
+                <div class="timeline-date">${dateStr}</div>
+                <div class="timeline-title">${st.title}</div>
+                ${st.desc ? `<div class="timeline-desc">${st.desc}</div>` : ''}
+              </div>`;
+          }
         }
       } catch (e) {
         console.error("Failed to parse raw_response", e);

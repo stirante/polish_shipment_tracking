@@ -105,16 +105,31 @@ class DhlApi:
         return data
 
     async def get_parcels(self):
-        return await self.request(
-            "POST",
-            "user/shipment/v2.1/list/incoming/active/1",
-            {
-                "shipmentFilterTypes": [],
-                "shipmentFilterStatuses": [],
-                "page": 1,
-            },
-        )
+        # The active-incoming list is paginated (often 1 item per page). Follow
+        # hasNextPage so accounts with several active parcels aren't truncated to
+        # the first page. Returns the same {"shipments": [...]} shape as one page.
+        all_shipments: list = []
+        page = 1
+        while page <= 50:  # safety cap against a server that never clears hasNextPage
+            data = await self.request(
+                "POST",
+                f"user/shipment/v2.1/list/incoming/active/{page}",
+                {
+                    "shipmentFilterTypes": [],
+                    "shipmentFilterStatuses": [],
+                    "page": page,
+                },
+            )
+            if not isinstance(data, dict):
+                break
+            shipments = data.get("shipments") or []
+            all_shipments.extend(shipments)
+            if not shipments or not data.get("hasNextPage"):
+                break
+            page += 1
+        return {"shipments": all_shipments}
 
     async def get_parcel(self, shipment_number: str):
         encoded = urllib.parse.quote(str(shipment_number), safe="")
-        return await self.request("GET", f"user/shipment/v2/details/{encoded}")
+        # DHL switched this endpoint from GET to POST (GET now returns 405).
+        return await self.request("POST", f"user/shipment/v2/details/{encoded}")
