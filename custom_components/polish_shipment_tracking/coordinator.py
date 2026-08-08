@@ -22,7 +22,7 @@ from .const import (
     CONF_SESSION_REGISTERED,
 )
 from .helpers import get_parcel_detail_id, get_parcel_id
-from .helpers import is_delivered
+from .helpers import is_archived, is_delivered
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -170,6 +170,20 @@ class ShipmentCoordinator(DataUpdateCoordinator):
                     if key in data and isinstance(data[key], list):
                         parcels = data[key]
                         break
+            if not parcels:
+                return []
+
+            # /tracking also returns parcels the user has already collected and the
+            # app has archived. They carry no state/history, so skip them before the
+            # per-parcel detail fan-out instead of spending a request on each.
+            before = len(parcels)
+            parcels = [p for p in parcels if not is_archived(p, self.courier)]
+            if len(parcels) != before:
+                _LOGGER.debug(
+                    "Pocztex: skipped %d archived parcel(s) out of %d",
+                    before - len(parcels),
+                    before,
+                )
             if not parcels:
                 return []
 

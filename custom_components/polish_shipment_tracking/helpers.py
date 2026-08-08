@@ -379,5 +379,21 @@ def normalize_status(raw_status, courier):
 
 def is_delivered(data: dict, courier: str) -> bool:
     """Check if parcel is delivered."""
+    if is_archived(data, courier):
+        return True
     status_key = normalize_status(get_raw_status(data, courier), courier)
     return status_key in {"delivered", "returned", "cancelled"}
+
+def is_archived(data: dict, courier: str) -> bool:
+    """Check if the courier has archived the parcel (finished, no longer incoming).
+
+    Pocztex archives a shipment once it has been collected and blanks out its
+    ``state``/``stateCode``/``history`` at the same time, so the status can never
+    resolve to "delivered" — it normalizes to "unknown" and the parcel would be
+    kept as active forever. The ``archived`` flag is the only reliable signal.
+    """
+    if not isinstance(data, dict):
+        return False
+    if courier == "pocztex":
+        return data.get("archived") is True
+    return False
