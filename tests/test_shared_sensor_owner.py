@@ -70,6 +70,7 @@ class SharedSensorOwnerTests(unittest.TestCase):
         cls.scope = {
             "callback": lambda fn: fn,
             "SensorEntity": FakeSensorEntity,
+            "SensorStateClass": type("SensorStateClass", (), {"MEASUREMENT": "measurement"}),
             "DOMAIN": "polish_shipment_tracking",
             "ACTIVE_SHIPMENTS_UNIQUE_ID": "polish_shipment_tracking_active_shipments",
             "READY_FOR_PICKUP_SHIPMENTS_UNIQUE_ID": "polish_shipment_tracking_ready_for_pickup_shipments",
