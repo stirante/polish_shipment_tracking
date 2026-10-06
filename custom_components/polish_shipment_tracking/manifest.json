@@ -8,5 +8,5 @@
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/stirante/polish_shipment_tracking/issues",
   "requirements": [],
-  "version": "1.7.1"
+  "version": "1.8.0"
 }
