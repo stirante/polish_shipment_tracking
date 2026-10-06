@@ -41,6 +41,9 @@ const CARD_TRANSLATIONS = {
     "editor.show_dialog_allegro_total": "Show Allegro order total",
     "editor.show_dialog_allegro_order_date": "Show Allegro order date",
     "editor.show_dialog_allegro_shipment": "Show Allegro shipment number and tracking link",
+    "editor.filters": "Filters",
+    "editor.entries": "Show only these accounts",
+    "editor.contacts": "Show only parcels for phone numbers / e-mails (account or recipient)",
     "dialog.sender": "Sender",
     "dialog.account_contact": "Shipment For",
     "dialog.recipient": "Recipient",
@@ -137,6 +140,9 @@ const CARD_TRANSLATIONS = {
     "editor.show_dialog_allegro_total": "Pokaż sumę zamówienia Allegro",
     "editor.show_dialog_allegro_order_date": "Pokaż datę zamówienia Allegro",
     "editor.show_dialog_allegro_shipment": "Pokaż numer i link śledzenia przesyłki Allegro",
+    "editor.filters": "Filtry",
+    "editor.entries": "Pokazuj tylko te konta",
+    "editor.contacts": "Pokazuj tylko paczki dla numerów telefonu / e-maili (konta lub odbiorcy)",
     "dialog.sender": "Nadawca",
     "dialog.account_contact": "Przesyłka na",
     "dialog.recipient": "Odbiorca",
@@ -638,6 +644,34 @@ class ShipmentTrackingCard extends HTMLElement {
     this.config = { ...(config || {}) };
     this._updateTitle();
     this.updateContent();
+  }
+
+  _configList(key) {
+    const value = this.config?.[key];
+    const items = Array.isArray(value) ? value : (typeof value === 'string' ? value.split(',') : []);
+    return items.map((item) => String(item).trim()).filter(Boolean);
+  }
+
+  _passesFilters(attrs) {
+    // Card filters from #5: one card per account / person.
+    const entries = this._configList('entries');
+    if (entries.length && !entries.includes(attrs.config_entry_id)) return false;
+
+    const contacts = this._configList('contacts');
+    if (!contacts.length) return true;
+    const digits = (text) => String(text || '').replace(/\D/g, '');
+    const account = String(attrs.account_contact || '').toLowerCase();
+    const phones = [...(attrs.recipient_phones || [])];
+    const accountDigits = digits(account);
+    if (!account.includes('@') && accountDigits.length >= 9) phones.push(accountDigits.slice(-9));
+    const emails = (attrs.recipient_emails || []).map((email) => String(email).toLowerCase());
+    if (account.includes('@')) emails.push(account);
+
+    return contacts.some((contact) => {
+      if (contact.includes('@')) return emails.includes(contact.toLowerCase());
+      const wanted = digits(contact).slice(-9);
+      return wanted.length >= 6 && phones.some((phone) => phone.endsWith(wanted));
+    });
   }
 
   static getStubConfig() {
@@ -1619,7 +1653,8 @@ class ShipmentTrackingCard extends HTMLElement {
     const entitiesToShow = Object.keys(this._hass.states).filter((entityId) => {
       if (!entityId.startsWith("sensor.")) return false;
       const stateObj = this._hass.states[entityId];
-      return stateObj?.attributes?.integration_domain === "polish_shipment_tracking";
+      return stateObj?.attributes?.integration_domain === "polish_shipment_tracking"
+        && this._passesFilters(stateObj.attributes);
     });
 
     entitiesToShow.sort((a, b) => {
@@ -1776,7 +1811,21 @@ class ShipmentTrackingCard extends HTMLElement {
 class ShipmentTrackingCardEditor extends HTMLElement {
   set hass(hass) {
     this._hass = hass;
+    this._loadEntries();
     this._render();
+  }
+
+  async _loadEntries() {
+    // Account list for the "show only these accounts" filter.
+    if (this._entriesRequested || !this._hass?.callWS) return;
+    this._entriesRequested = true;
+    try {
+      const entries = await this._hass.callWS({ type: "config_entries/get", domain: "polish_shipment_tracking" });
+      this._entries = (entries || []).sort((a, b) => String(a.title).localeCompare(String(b.title)));
+      this._render();
+    } catch (e) {
+      console.warn("Shipment Tracking Card: cannot list accounts", e);
+    }
   }
 
   setConfig(config) {
@@ -1964,6 +2013,30 @@ class ShipmentTrackingCardEditor extends HTMLElement {
         name: "show_dialog_allegro_shipment",
         label: this._localize("editor.show_dialog_allegro_shipment"),
         selector: { boolean: {} }
+      },
+      {
+        type: "expandable",
+        name: "",
+        flatten: true,
+        title: this._localize("editor.filters"),
+        schema: [
+          {
+            name: "entries",
+            label: this._localize("editor.entries"),
+            selector: {
+              select: {
+                multiple: true,
+                mode: "list",
+                options: (this._entries || []).map((entry) => ({ value: entry.entry_id, label: entry.title })),
+              }
+            }
+          },
+          {
+            name: "contacts",
+            label: this._localize("editor.contacts"),
+            selector: { text: { multiple: true } }
+          }
+        ]
       }
     ];
 
@@ -2012,7 +2085,11 @@ class ShipmentTrackingCardEditor extends HTMLElement {
   }
 
   _handleChange(event) {
-    const newConfig = event.detail.value;
+    const newConfig = { ...event.detail.value };
+    // Keep the YAML clean when a filter is emptied.
+    ["entries", "contacts"].forEach((key) => {
+      if (Array.isArray(newConfig[key]) && !newConfig[key].filter(Boolean).length) delete newConfig[key];
+    });
     this._config = newConfig;
     this.dispatchEvent(new CustomEvent("config-changed", {
       detail: { config: newConfig },

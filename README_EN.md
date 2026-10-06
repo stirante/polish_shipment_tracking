@@ -179,6 +179,24 @@ See the implementation in the integration code (sensor.py).
 
 The integration bundles a Lovelace card (JavaScript module) and will automatically add it to Lovelace Resources.
 
+The Filters section of the card editor narrows a card down, for example to have
+one card per household member:
+
+- Show only these accounts: selected accounts (integration entries),
+- Show only parcels for phone numbers / e-mails: a parcel matches when the
+  number or e-mail belongs to the account or to the parcel recipient. The
+  number format does not matter.
+
+Both filters apply together. Not every carrier reports recipient data (DPD does
+not, for example), so such parcels match on the account data only.
+
+```yaml
+type: custom:shipment-tracking-card
+contacts:
+  - "+48 600 100 200"
+  - jan@example.com
+```
+
 ## Debugging
 
 Enable debug logs:

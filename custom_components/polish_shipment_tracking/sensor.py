@@ -21,6 +21,7 @@ from .helpers import (
     get_shipment_entity_id,
     get_account_label,
     get_parcel_id,
+    get_recipient_contacts,
     get_parcel_tracking_numbers,
     get_raw_status,
     is_delivered,
@@ -336,7 +337,14 @@ class ShipmentSensor(CoordinatorEntity[ShipmentCoordinator], SensorEntity):
             "tracking_number": self._tracking_number,
             "integration_domain": DOMAIN,
             "account_contact": self._get_account_contact(),
+            # Used by the card to show parcels of selected accounts/people only.
+            "config_entry_id": self.coordinator.entry.entry_id,
         }
+        recipient_phones, recipient_emails = get_recipient_contacts(self.parcel_data)
+        if recipient_phones:
+            attrs["recipient_phones"] = recipient_phones
+        if recipient_emails:
+            attrs["recipient_emails"] = recipient_emails
         
         raw_status = get_raw_status(self.parcel_data, self._courier)
         attrs["status_raw"] = raw_status

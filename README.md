@@ -183,6 +183,24 @@ Dokładne mapowania są w kodzie integracji (sensor.py).
 
 Integracja zawiera kartę Lovelace (JavaScript module) i automatycznie dodaje ją jako zasób w dashboardach.
 
+W sekcji Filtry edytora karty można ograniczyć kartę, np. żeby mieć osobną
+kartę dla każdego domownika:
+
+- Pokazuj tylko te konta: wybrane konta (wpisy integracji),
+- Pokazuj tylko paczki dla numerów telefonu / e-maili: paczka pasuje, gdy
+  numer lub e-mail należy do konta albo do odbiorcy paczki. Format numeru nie
+  ma znaczenia.
+
+Oba filtry działają razem. Nie każdy przewoźnik podaje dane odbiorcy (np. DPD
+ich nie podaje), więc takie paczki pasują tylko po danych konta.
+
+```yaml
+type: custom:shipment-tracking-card
+contacts:
+  - "+48 600 100 200"
+  - jan@example.com
+```
+
 ## Debugowanie
 
 Możesz włączyć debug logi dla integracji:

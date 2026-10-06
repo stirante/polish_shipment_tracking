@@ -786,6 +786,23 @@ def get_recipient_texts(parcel: dict) -> list[str]:
     return texts
 
 
+def get_recipient_contacts(parcel: dict) -> tuple[list[str], list[str]]:
+    """Recipient phone numbers (last 9 digits) and e-mail addresses, for the card filter."""
+    phones: list[str] = []
+    emails: list[str] = []
+    for text in get_recipient_texts(parcel):
+        if "@" in text and "." in text.split("@")[-1]:
+            email = text.strip().lower()
+            if email not in emails:
+                emails.append(email)
+            continue
+        digits = _digits(text)
+        # Phone numbers only: tracking and point ids are longer or shorter.
+        if 9 <= len(digits) <= 12 and digits[-9:] not in phones:
+            phones.append(digits[-9:])
+    return phones, emails
+
+
 def parse_recipient_patterns(value) -> list[str]:
     """Split the options text (lines or commas) into patterns."""
     if not value:
