@@ -73,6 +73,12 @@
       },
       "active_shipments": {
         "name": "Aktywne przesyłki"
+      },
+      "ready_for_pickup_shipments": {
+        "name": "Przesyłki gotowe do odbioru"
+      },
+      "ready_for_pickup_account": {
+        "name": "Gotowe do odbioru"
       }
     }
   },

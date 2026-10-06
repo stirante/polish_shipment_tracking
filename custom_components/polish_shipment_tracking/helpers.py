@@ -431,6 +431,15 @@ def normalize_status(raw_status, courier):
 
     return "unknown"
 
+def count_ready_for_pickup(parcels: list[dict], courier: str) -> int:
+    """Count parcels whose normalized status means they await collection."""
+    return sum(
+        normalize_status(get_raw_status(parcel, courier), courier) == "waiting_for_pickup"
+        for parcel in parcels
+        if isinstance(parcel, dict)
+    )
+
+
 def is_delivered(data: dict, courier: str) -> bool:
     """Check if parcel is delivered."""
     # Pocztex archives parcels with state/stateCode nulled out, which would

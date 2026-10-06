@@ -73,6 +73,12 @@
       },
       "active_shipments": {
         "name": "Active shipments"
+      },
+      "ready_for_pickup_shipments": {
+        "name": "Shipments ready for pickup"
+      },
+      "ready_for_pickup_account": {
+        "name": "Ready for pickup"
       }
     }
   },

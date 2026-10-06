@@ -115,6 +115,12 @@ The integration creates one `sensor` per active (not delivered) shipment.
   - event timestamps
   - pickup point details
 
+The integration also exposes a ready-for-pickup count on each courier account
+device and one overall count across all configured accounts and couriers.
+These counts use the normalized `waiting_for_pickup` status and decrease when
+a parcel leaves the active list. The overall count includes every configured
+account; use the account device sensors when accounts should stay separate.
+
 ## Events (custom)
 
 The integration fires events on the `hass.bus`:

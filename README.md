@@ -115,6 +115,13 @@ Integracja tworzy encję `sensor` dla każdej aktywnej (niedostarczonej) przesy�
   - daty zdarzeń
   - informacje o punkcie odbioru
 
+Dodatkowo integracja udostępnia licznik przesyłek gotowych do odbioru dla
+każdego konta kuriera oraz licznik zbiorczy dla wszystkich skonfigurowanych
+kont i kurierów. Liczniki uwzględniają znormalizowany status
+`waiting_for_pickup` i maleją, gdy przesyłka znika z listy aktywnych.
+Licznik zbiorczy obejmuje wszystkie konta; do rozdzielenia kont służą
+liczniki na urządzeniach poszczególnych kont.
+
 
 
 
