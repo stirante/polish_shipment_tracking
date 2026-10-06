@@ -739,6 +739,12 @@ class ActiveShipmentsSensor(SensorEntity):
         """Initialize the sensor."""
         self.hass = hass
         self._coordinators: dict[ShipmentCoordinator, Any] = {}
+        self._added = False
+
+    async def async_added_to_hass(self) -> None:
+        """Remember that state can be written from now on."""
+        await super().async_added_to_hass()
+        self._added = True
 
     def attach_coordinator(self, coordinator: ShipmentCoordinator) -> None:
         """Attach a coordinator to this sensor."""
@@ -746,6 +752,10 @@ class ActiveShipmentsSensor(SensorEntity):
             self._coordinators[coordinator] = coordinator.async_add_listener(
                 self.async_write_ha_state
             )
+            # Accounts set up after the sensor was added would otherwise only
+            # be counted after their next poll, up to 15 minutes later.
+            if self._added:
+                self.async_write_ha_state()
 
     def detach_coordinator(self, coordinator: ShipmentCoordinator) -> None:
         """Detach a coordinator from this sensor."""
