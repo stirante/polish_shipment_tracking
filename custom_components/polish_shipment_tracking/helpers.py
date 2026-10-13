@@ -211,6 +211,11 @@ _STATUS_MAP = {
         "CANCELED": "cancelled",
         "CANCELLED": "cancelled",
         "CANCELED_REDIRECT_TO_BOX": "cancelled",
+        "TERMINATED": "cancelled",
+        "CLAIM_PROCESSED": "returned",
+        "RETURNED": "returned",
+        "DESTROYED": "cancelled",
+        "DISCARDED": "cancelled",
         "DELAY_IN_DELIVERY": "exception",
         "DELIVERY_ATTEMPT_FAILED": "exception",
         "UNDELIVERED": "exception",
@@ -440,15 +445,40 @@ def count_ready_for_pickup(parcels: list[dict], courier: str) -> int:
     )
 
 
+INPOST_TERMINAL_STATUSES = {
+    "DELIVERED",
+    "COLLECTED_BY_CUSTOMER",
+    "RETURNED",
+    "RETURNED_TO_SENDER",
+    "RETURN_PICKUP_CONFIRMATION_TO_SENDER",
+    "NOT_COLLECTED",
+    "PICKUP_TIME_EXPIRED",
+    "STACK_PARCEL_PICKUP_TIME_EXPIRED",
+    "STACK_PARCEL_IN_BOX_MACHINE_PICKUP_TIME_EXPIRED",
+    "CANCELED",
+    "CANCELLED",
+    "CANCELED_REDIRECT_TO_BOX",
+    "TERMINATED",
+    "CLAIM_PROCESSED",
+    "DESTROYED",
+    "DISCARDED",
+}
+
+
 def is_delivered(data: dict, courier: str) -> bool:
-    """Check if parcel is delivered."""
+    """Check if parcel is delivered or in a terminal state."""
+    if not isinstance(data, dict):
+        return False
     # Pocztex archives parcels with state/stateCode nulled out, which would
     # otherwise normalize to "unknown" and resurface the parcel as active.
     # Parcels that merely lack a state (e.g. still awaiting the first scan)
     # keep archived=false and must stay active.
     if courier == "pocztex" and data.get("archived") is True:
         return True
-    status_key = normalize_status(get_raw_status(data, courier), courier)
+    raw_status = str(get_raw_status(data, courier) or "").strip().upper()
+    if courier == "inpost" and raw_status in INPOST_TERMINAL_STATUSES:
+        return True
+    status_key = normalize_status(raw_status, courier)
     return status_key in {"delivered", "returned", "cancelled"}
 
 
@@ -507,7 +537,7 @@ def reconcile_departed_parcels(
         if new_parcel is not None:
             new_raw_status = get_raw_status(new_parcel, courier)
             new_status_key = normalize_status(new_raw_status, courier)
-            if new_status_key in {"delivered", "returned", "cancelled"}:
+            if is_delivered(new_parcel, courier) or new_status_key in {"delivered", "returned", "cancelled"}:
                 events.append(
                     (
                         "shipment_status_changed",
