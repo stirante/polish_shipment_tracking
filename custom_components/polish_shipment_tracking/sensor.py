@@ -406,6 +406,14 @@ class ShipmentSensor(CoordinatorEntity[ShipmentCoordinator], SensorEntity):
             if isinstance(phone, dict):
                 attrs["phone_number"] = phone.get("value")
 
+        expiry_date = self.parcel_data.get("expiryDate") or self.parcel_data.get("expiry_date")
+        if expiry_date is not None:
+            attrs["expiry_date"] = expiry_date
+
+        stored_date = self.parcel_data.get("storedDate") or self.parcel_data.get("stored_date")
+        if stored_date is not None:
+            attrs["stored_date"] = stored_date
+
     def _add_dpd_attributes(self, attrs: dict) -> None:
         """Add DPD specific attributes."""
         sender = self.parcel_data.get("sender")
