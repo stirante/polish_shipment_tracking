@@ -1,8 +1,9 @@
-from datetime import timedelta
+from datetime import datetime, timezone, timedelta
 import asyncio
 import logging
 import json
 import time
+from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
@@ -34,18 +35,129 @@ from .const import (
     SIGNAL_ALLEGRO_ORDERS_UPDATED,
 )
 from .api_inpost import InPostAuthError
-from .helpers import get_parcel_detail_id, get_parcel_id
 from .helpers import (
+    get_parcel_detail_id,
+    get_parcel_id,
     get_parcel_tracking_numbers,
+    get_raw_status,
     is_delivered,
     matches_recipient_filters,
     merge_allegro_details,
     normalize_allegro_orders,
+    normalize_status,
     parse_recipient_patterns,
     reconcile_departed_parcels,
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+DEAD_LABEL_THRESHOLD = timedelta(days=7)
+
+
+def _parse_datetime_safe(val: Any) -> datetime | None:
+    """Parse various datetime string/timestamp formats into timezone-aware UTC datetime."""
+    if not val:
+        return None
+    if isinstance(val, (int, float)):
+        ts = val / 1000.0 if val > 1e11 else float(val)
+        return datetime.fromtimestamp(ts, tz=timezone.utc)
+    if isinstance(val, datetime):
+        return val if val.tzinfo is not None else val.replace(tzinfo=timezone.utc)
+    if isinstance(val, str):
+        val = val.strip()
+        if not val:
+            return None
+        clean_val = val[:-1] + "+00:00" if val.endswith("Z") else val
+        try:
+            dt = datetime.fromisoformat(clean_val)
+            return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+        except (ValueError, TypeError):
+            pass
+        try:
+            from homeassistant.util.dt import parse_datetime
+            dt = parse_datetime(val)
+            if dt is not None:
+                return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+        except Exception:
+            pass
+    return None
+
+
+def _has_courier_movement(parcel: dict, courier: str) -> bool:
+    """Check if parcel history contains courier movement beyond creation."""
+    events = parcel.get("eventLog") or parcel.get("events") or []
+    if not isinstance(events, list):
+        return False
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        event_name = (
+            event.get("name")
+            or event.get("status")
+            or event.get("eventTitle")
+            or event.get("state")
+        )
+        if event_name:
+            key = normalize_status(str(event_name), courier)
+            if key not in {"created", "unknown"}:
+                return True
+    return False
+
+
+def _get_stale_label_date(parcel: dict) -> datetime | None:
+    """Get the label generation date or last eventLog entry date."""
+    events = parcel.get("eventLog") or parcel.get("events") or []
+    latest_event_date = None
+    if isinstance(events, list) and events:
+        for event in events:
+            if isinstance(event, dict):
+                date_val = (
+                    event.get("date")
+                    or event.get("datetime")
+                    or event.get("timestamp")
+                    or event.get("eventDate")
+                )
+                dt = _parse_datetime_safe(date_val)
+                if dt is not None and (latest_event_date is None or dt > latest_event_date):
+                    latest_event_date = dt
+
+    if latest_event_date is not None:
+        return latest_event_date
+
+    for field in (
+        "creationDate",
+        "createdDate",
+        "createdAt",
+        "created_at",
+        "shipmentDate",
+        "updatedDate",
+        "updatedAt",
+    ):
+        val = parcel.get(field)
+        dt = _parse_datetime_safe(val)
+        if dt is not None:
+            return dt
+
+    return None
+
+
+def is_dead_label(parcel: dict, courier: str, threshold: timedelta = DEAD_LABEL_THRESHOLD) -> bool:
+    """Check if parcel is a stale/dead label (CONFIRMED/CREATED) without courier movement."""
+    raw_status = str(get_raw_status(parcel, courier) or "").strip().upper()
+    status_key = normalize_status(raw_status, courier)
+
+    if raw_status not in {"CONFIRMED", "CREATED", "OFFER_SELECTED", "OFFERS_PREPARED"} and status_key != "created":
+        return False
+
+    if _has_courier_movement(parcel, courier):
+        return False
+
+    label_date = _get_stale_label_date(parcel)
+    if label_date is None:
+        return False
+
+    now = datetime.now(timezone.utc)
+    return (now - label_date) > threshold
 
 class ShipmentCoordinator(DataUpdateCoordinator):
     """Class to manage fetching shipment data."""
@@ -551,15 +663,45 @@ class ShipmentCoordinator(DataUpdateCoordinator):
         """Keep only active parcels this account should show."""
         if not isinstance(parcels, list):
             return []
-        active = [
-            parcel
-            for parcel in parcels
-            if isinstance(parcel, dict)
-            and not is_delivered(parcel, self.courier)
-            and matches_recipient_filters(
+
+        active = []
+        for parcel in parcels:
+            if not isinstance(parcel, dict):
+                continue
+
+            parcel_id = get_parcel_id(parcel, self.courier)
+            raw_status = get_raw_status(parcel, self.courier)
+
+            # 1. Delivery criterion: exclude delivered or terminal parcels
+            if is_delivered(parcel, self.courier):
+                _LOGGER.debug(
+                    "Filtered out delivered/terminal parcel %s (%s)",
+                    parcel_id,
+                    raw_status,
+                )
+                continue
+
+            # 2. Dead label criterion: exclude stale labels without movement
+            if is_dead_label(parcel, self.courier):
+                _LOGGER.debug(
+                    "Filtered out stale dead label parcel %s (%s)",
+                    parcel_id,
+                    raw_status,
+                )
+                continue
+
+            # 3. Recipient filter
+            if not matches_recipient_filters(
                 parcel, self._include_recipients, self._exclude_recipients
-            )
-        ]
+            ):
+                _LOGGER.debug(
+                    "Filtered out parcel %s due to recipient filter",
+                    parcel_id,
+                )
+                continue
+
+            active.append(parcel)
+
         if self.courier == "allegro":
             # An order shipped with a carrier the user also has an account
             # for is shown by that account; Allegro only adds order details.
@@ -569,6 +711,12 @@ class ShipmentCoordinator(DataUpdateCoordinator):
                 for parcel in active
                 if not (get_parcel_tracking_numbers(parcel, self.courier) & tracked)
             ]
+        _LOGGER.debug(
+            "_filter_active_parcels [%s]: %d total fetched, %d active",
+            self.courier,
+            len(parcels),
+            len(active),
+        )
         return active
 
     async def async_refresh_parcel(self, tracking_number: str) -> None:

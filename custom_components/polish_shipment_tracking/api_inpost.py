@@ -211,7 +211,51 @@ class InPostApi:
             )
 
     async def get_parcels(self):
-        return await self.request("GET", "v4/parcels/tracked")
+        """Fetch all tracked parcels, following API pagination until all pages are retrieved."""
+        all_parcels = []
+        cursor = None
+        has_more = True
+        max_pages = 20
+
+        while has_more and max_pages > 0:
+            max_pages -= 1
+            path = "v4/parcels/tracked"
+            if cursor:
+                path = f"v4/parcels/tracked?updatedAfter={urllib.parse.quote(str(cursor), safe=':')}"
+
+            data = await self.request("GET", path)
+            if not data:
+                break
+
+            if isinstance(data, list):
+                all_parcels.extend(data)
+                break
+
+            if isinstance(data, dict):
+                batch = data.get("parcels", [])
+                if isinstance(batch, list):
+                    all_parcels.extend(batch)
+                has_more = bool(data.get("more"))
+                cursor = data.get("updatedUntil")
+                if not cursor or not batch:
+                    break
+            else:
+                break
+
+        # Deduplicate parcels while preserving order
+        seen = set()
+        unique_parcels = []
+        for p in all_parcels:
+            if isinstance(p, dict):
+                pid = p.get("shipmentNumber")
+                if pid:
+                    if pid not in seen:
+                        seen.add(pid)
+                        unique_parcels.append(p)
+                else:
+                    unique_parcels.append(p)
+
+        return unique_parcels
 
     async def get_parcel(self, shipment_number: str):
         encoded = urllib.parse.quote(str(shipment_number), safe="")
