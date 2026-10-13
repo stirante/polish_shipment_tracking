@@ -397,6 +397,39 @@ class ShipmentTrackingCard extends HTMLElement {
             letter-spacing: 1px;
             width: fit-content;
           }
+          .inpost-progress-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 4px;
+            width: 100%;
+          }
+          .inpost-progress-bar {
+            flex: 1;
+            height: 6px;
+            border-radius: 3px;
+            background-color: #e0e0e0;
+            display: flex;
+            overflow: hidden;
+          }
+          .inpost-progress-elapsed {
+            background-color: #9e9e9e;
+            height: 100%;
+          }
+          .inpost-progress-remaining {
+            background-color: #ffcc00;
+            height: 100%;
+          }
+          .inpost-progress-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--secondary-text-color);
+            white-space: nowrap;
+          }
+          .modal-progress-row {
+            margin-top: -2px;
+            margin-bottom: 6px;
+          }
           .status-delivered { background-color: rgba(76, 175, 80, 0.2); color: #4CAF50; }
           .status-ready { background-color: rgba(255, 193, 7, 0.2); color: #FFC107; border: 1px solid rgba(255, 193, 7, 0.3); }
           .status-transit { background-color: rgba(33, 150, 243, 0.2); color: #2196F3; }
@@ -937,6 +970,49 @@ class ShipmentTrackingCard extends HTMLElement {
     }
   }
 
+  _renderInPostProgressBar(attrs) {
+    if (!attrs) return '';
+    const expiryStr = attrs.expiry_date;
+    const storedStr = attrs.stored_date;
+    if (!expiryStr) return '';
+
+    const parseDateMs = (str) => {
+      if (!str) return NaN;
+      if (typeof str === 'number') return str > 1e11 ? str : str * 1000;
+      const clean = String(str).trim().replace(' ', 'T');
+      return new Date(clean).getTime();
+    };
+
+    const expiryTime = parseDateMs(expiryStr);
+    if (isNaN(expiryTime)) return '';
+
+    const storedTime = storedStr ? parseDateMs(storedStr) : (expiryTime - 48 * 3600 * 1000);
+    if (isNaN(storedTime) || expiryTime <= storedTime) return '';
+
+    const now = Date.now();
+    const totalTime = expiryTime - storedTime;
+    const elapsed = Math.min(totalTime, Math.max(0, now - storedTime));
+    const percentElapsed = ((elapsed / totalTime) * 100).toFixed(1);
+    const percentRemaining = (100 - percentElapsed).toFixed(1);
+
+    const msRemaining = Math.max(0, expiryTime - now);
+    const totalMinutes = Math.floor(msRemaining / (1000 * 60));
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+
+    const timeText = msRemaining <= 0 ? "0h 0min" : `${hours}h ${minutes}min`;
+
+    return `
+      <div class="inpost-progress-container">
+        <div class="inpost-progress-bar">
+          <div class="inpost-progress-elapsed" style="width: ${percentElapsed}%;"></div>
+          <div class="inpost-progress-remaining" style="width: ${percentRemaining}%;"></div>
+        </div>
+        <div class="inpost-progress-label">${timeText}</div>
+      </div>
+    `;
+  }
+
   getStatusInfo(stateObj) {
     const attributes = stateObj?.attributes || {};
     const statusKey = (attributes.status_key || '').toString().toLowerCase();
@@ -1397,6 +1473,10 @@ class ShipmentTrackingCard extends HTMLElement {
 
           locationContent += `</span>`;
           infoHtml += `<div class="modal-info-block-row"><strong>${this._localize("dialog.pickup_point")}:</strong> ${locationContent}</div>`;
+          const progressBarModal = this._renderInPostProgressBar(attrs);
+          if (progressBarModal) {
+            infoHtml += `<div class="modal-info-block-row modal-progress-row">${progressBarModal}</div>`;
+          }
         }
 
         const qrPayload = courier === 'inpost'
@@ -1590,6 +1670,10 @@ class ShipmentTrackingCard extends HTMLElement {
     } else {
       if (this._isEnabled("show_dialog_pickup_point") && (attrs.location || attrs.current_location)) {
         infoHtml += `<div class="modal-info-block-row"><strong>${this._localize("dialog.pickup_point")}:</strong> <span class="val">${attrs.location || attrs.current_location}</span></div>`;
+        const progressBarModal = this._renderInPostProgressBar(attrs);
+        if (progressBarModal) {
+          infoHtml += `<div class="modal-info-block-row modal-progress-row">${progressBarModal}</div>`;
+        }
       }
     }
 
@@ -1694,14 +1778,52 @@ class ShipmentTrackingCard extends HTMLElement {
     });
 
     entitiesToShow.sort((a, b) => {
-        const keyA = (this._hass.states[a]?.attributes?.status_key || '').toString().toLowerCase();
-        const keyB = (this._hass.states[b]?.attributes?.status_key || '').toString().toLowerCase();
-        const score = (s) => {
-            if (s === 'waiting_for_pickup') return 0;
-            if (s === 'handed_out_for_delivery' || s === 'in_transport') return 1;
+        const stateObjA = this._hass.states[a];
+        const stateObjB = this._hass.states[b];
+        const attrsA = stateObjA?.attributes || {};
+        const attrsB = stateObjB?.attributes || {};
+        const keyA = (attrsA.status_key || '').toString().toLowerCase();
+        const keyB = (attrsB.status_key || '').toString().toLowerCase();
+
+        const isPickup = (attrs, key) => {
+            return key === 'waiting_for_pickup' || Boolean(attrs.open_code || attrs.pickup_code);
+        };
+        const isTransit = (key) => {
+            return key === 'handed_out_for_delivery' || key === 'in_transport';
+        };
+
+        const isPickupA = isPickup(attrsA, keyA);
+        const isPickupB = isPickup(attrsB, keyB);
+
+        const groupScore = (isPick, key) => {
+            if (isPick) return 0;
+            if (isTransit(key)) return 1;
             return 2;
         };
-        return score(keyA) - score(keyB);
+
+        const scoreA = groupScore(isPickupA, keyA);
+        const scoreB = groupScore(isPickupB, keyB);
+
+        if (scoreA !== scoreB) {
+            return scoreA - scoreB;
+        }
+
+        // Packages waiting for pickup sorted ascending by expiry_date (soonest expiry first)
+        if (scoreA === 0) {
+            const getExpiryTime = (attrs) => {
+                if (!attrs.expiry_date) return Infinity;
+                const clean = String(attrs.expiry_date).trim().replace(' ', 'T');
+                const t = new Date(clean).getTime();
+                return isNaN(t) ? Infinity : t;
+            };
+            const expA = getExpiryTime(attrsA);
+            const expB = getExpiryTime(attrsB);
+            if (expA !== expB) {
+                return expA - expB;
+            }
+        }
+
+        return 0;
     });
 
     const signatureParts = [];
@@ -1722,7 +1844,9 @@ class ShipmentTrackingCard extends HTMLElement {
           attrs.location || '',
           attrs.current_location || '',
           attrs.open_code || '',
-        attrs.pickup_code || ''
+          attrs.pickup_code || '',
+          attrs.expiry_date || '',
+          attrs.stored_date || ''
       ].join('|'));
     });
 
@@ -1793,6 +1917,10 @@ class ShipmentTrackingCard extends HTMLElement {
         }
         if (this._isEnabled("show_list_location") && location) {
              extraInfoHtml += `<div class="extra-info-text">${pickupPointLabel}: ${location}</div>`;
+        }
+        const progressBarHtml = this._renderInPostProgressBar(attributes);
+        if (progressBarHtml) {
+             extraInfoHtml += progressBarHtml;
         }
         const allegroItems = this._allegroItems(attributes);
         if (allegroItems.length && this._isEnabled("show_list_allegro_items")) {
@@ -2135,8 +2263,12 @@ class ShipmentTrackingCardEditor extends HTMLElement {
   }
 }
 
-customElements.define('shipment-tracking-card', ShipmentTrackingCard);
-customElements.define('shipment-tracking-card-editor', ShipmentTrackingCardEditor);
+if (!customElements.get('shipment-tracking-card')) {
+  customElements.define('shipment-tracking-card', ShipmentTrackingCard);
+}
+if (!customElements.get('shipment-tracking-card-editor')) {
+  customElements.define('shipment-tracking-card-editor', ShipmentTrackingCardEditor);
+}
 
 window.customCards = window.customCards || [];
 if (!window.customCards.find((card) => card.type === 'shipment-tracking-card')) {
