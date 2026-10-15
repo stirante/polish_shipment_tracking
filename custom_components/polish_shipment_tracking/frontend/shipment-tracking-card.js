@@ -64,6 +64,8 @@ const CARD_TRANSLATIONS = {
     "dialog.scan_qr": "Scan at the parcel locker",
     "dialog.show_entity": "Show entity",
     "dialog.refresh_shipment": "Refresh shipment",
+    "dialog.hide_shipment": "Hide shipment",
+    "dialog.hide_shipment_confirm": "Hide this shipment? You can show it again in the account options (Configure).",
     "dialog.manage_shipment": "Manage shipment",
     "dialog.live_tracking": "Track courier live",
     "dialog.weight": "Weight",
@@ -163,6 +165,8 @@ const CARD_TRANSLATIONS = {
     "dialog.scan_qr": "Zeskanuj w paczkomacie",
     "dialog.show_entity": "Pokaż encję",
     "dialog.refresh_shipment": "Odśwież przesyłkę",
+    "dialog.hide_shipment": "Ukryj przesyłkę",
+    "dialog.hide_shipment_confirm": "Ukryć tę przesyłkę? Możesz ją przywrócić w opcjach konta (Konfiguruj).",
     "dialog.manage_shipment": "Zarządzaj przesyłką",
     "dialog.live_tracking": "Śledź kuriera na żywo",
     "dialog.weight": "Waga",
@@ -776,6 +780,23 @@ class ShipmentTrackingCard extends HTMLElement {
     }) || null;
   }
 
+  _getHideShipmentButtonId(attrs) {
+    if (!this._hass?.states || !attrs?.tracking_number || !attrs?.courier) return null;
+    const trackingNumber = String(attrs.tracking_number);
+    const courier = String(attrs.courier).toLowerCase();
+
+    return Object.keys(this._hass.states).find((entityId) => {
+      if (!entityId.startsWith("button.")) return false;
+      const buttonAttrs = this._hass.states[entityId]?.attributes || {};
+      return (
+        buttonAttrs.integration_domain === "polish_shipment_tracking"
+        && buttonAttrs.action === "hide"
+        && String(buttonAttrs.tracking_number) === trackingNumber
+        && String(buttonAttrs.courier).toLowerCase() === courier
+      );
+    }) || null;
+  }
+
   _hasDpdManageAction(attrs, raw) {
     const courier = String(attrs?.courier || "").toLowerCase();
     if (courier !== "dpd" || !raw || typeof raw !== "object") return false;
@@ -1086,6 +1107,7 @@ class ShipmentTrackingCard extends HTMLElement {
 
     // Header Actions Check
     const refreshShipmentButtonId = this._getRefreshShipmentButtonId(attrs);
+    const hideShipmentButtonId = this._getHideShipmentButtonId(attrs);
     let headerActionsHtml = '';
     
     if (this._isEnabled("show_dialog_entity_button")) {
@@ -1093,6 +1115,9 @@ class ShipmentTrackingCard extends HTMLElement {
     }
     if (refreshShipmentButtonId) {
       headerActionsHtml += `<button class="header-icon-btn" data-refresh-button="${refreshShipmentButtonId}" title="${this._localize("dialog.refresh_shipment")}"><ha-icon icon="mdi:refresh"></ha-icon></button>`;
+    }
+    if (hideShipmentButtonId) {
+      headerActionsHtml += `<button class="header-icon-btn" data-hide-button="${hideShipmentButtonId}" title="${this._localize("dialog.hide_shipment")}"><ha-icon icon="mdi:eye-off-outline"></ha-icon></button>`;
     }
     // The dialog is re-run on every state update; rewriting identical markup
     // would drop the user's text selection mid-copy, so only touch the DOM when
@@ -1133,6 +1158,17 @@ class ShipmentTrackingCard extends HTMLElement {
                 refreshBtn.classList.remove('loading');
             }, 400);
         }
+      });
+    }
+
+    const hideBtn = headerChanged ? this.querySelector('[data-hide-button]') : null;
+    if (hideBtn) {
+      hideBtn.addEventListener('click', async () => {
+        const hideEntityId = hideBtn.getAttribute('data-hide-button');
+        if (!hideEntityId) return;
+        if (!window.confirm(this._localize("dialog.hide_shipment_confirm"))) return;
+        await this._pressButtonEntity(hideEntityId);
+        this._closeDialog();
       });
     }
 

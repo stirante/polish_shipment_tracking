@@ -99,10 +99,11 @@
   "options": {
     "step": {
       "init": {
-        "description": "Filtry odbiorcy, jeden wzorzec w linii (lub po przecinku). Wzorzec pasuje do numeru telefonu odbiorcy (ostatnie 9 cyfr), imienia i nazwiska albo adresu, także adresu punktu odbioru; wielkość liter i polskie znaki nie mają znaczenia. Pokazuj tylko: widoczne są wyłącznie paczki pasujące do któregoś wzorca. Ukryj: paczki pasujące do któregoś wzorca są ukrywane. Paczki bez danych odbiorcy są zawsze widoczne.",
+        "description": "Filtry odbiorcy, jeden wzorzec w linii (lub po przecinku). Wzorzec pasuje do numeru telefonu odbiorcy (ostatnie 9 cyfr), imienia i nazwiska albo adresu, także adresu punktu odbioru; wielkość liter i polskie znaki nie mają znaczenia. Pokazuj tylko: widoczne są wyłącznie paczki pasujące do któregoś wzorca. Ukryj: paczki pasujące do któregoś wzorca są ukrywane. Paczki bez danych odbiorcy są zawsze widoczne. Ukryte przesyłki: numery przesyłek ukrytych ręcznie (także przyciskiem Ukryj przesyłkę); usuń numer, aby przesyłka znów była widoczna.",
         "data": {
           "include_recipients": "Pokazuj tylko paczki dla",
           "exclude_recipients": "Ukryj paczki dla",
+          "hidden_shipments": "Ukryte przesyłki (numery przesyłek)",
           "cookie": "Nowe ciasteczko QXLSESSID (Allegro, zostaw puste, by nie zmieniać)"
         }
       }

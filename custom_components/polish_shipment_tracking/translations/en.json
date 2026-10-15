@@ -99,10 +99,11 @@
   "options": {
     "step": {
       "init": {
-        "description": "Recipient filters, one pattern per line (or comma separated). A pattern matches the recipient phone number (last 9 digits), name or address, including the pickup point address; letter case and Polish characters are ignored. Include: only parcels matching any pattern are shown. Exclude: parcels matching any pattern are hidden. Parcels with no recipient data are always shown.",
+        "description": "Recipient filters, one pattern per line (or comma separated). A pattern matches the recipient phone number (last 9 digits), name or address, including the pickup point address; letter case and Polish characters are ignored. Include: only parcels matching any pattern are shown. Exclude: parcels matching any pattern are hidden. Parcels with no recipient data are always shown. Hidden shipments: tracking numbers you hid by hand (also with the Hide shipment button); remove a number to show the parcel again.",
         "data": {
           "include_recipients": "Show only parcels for",
           "exclude_recipients": "Hide parcels for",
+          "hidden_shipments": "Hidden shipments (tracking numbers)",
           "cookie": "New QXLSESSID cookie (Allegro, leave empty to keep the current one)"
         }
       }

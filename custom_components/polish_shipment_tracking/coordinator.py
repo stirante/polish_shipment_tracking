@@ -30,6 +30,7 @@ from .const import (
     CONF_COOKIE,
     CONF_INCLUDE_RECIPIENTS,
     CONF_EXCLUDE_RECIPIENTS,
+    CONF_HIDDEN_SHIPMENTS,
     SIGNAL_PARCELS_UPDATED,
     SIGNAL_ALLEGRO_ORDERS_UPDATED,
 )
@@ -37,10 +38,13 @@ from .api_inpost import InPostAuthError
 from .helpers import get_parcel_detail_id, get_parcel_id
 from .helpers import (
     get_parcel_tracking_numbers,
+    add_hidden_shipment,
     is_delivered,
+    is_hidden_shipment,
     matches_recipient_filters,
     merge_allegro_details,
     normalize_allegro_orders,
+    parse_hidden_shipments,
     parse_recipient_patterns,
     reconcile_departed_parcels,
 )
@@ -67,6 +71,9 @@ class ShipmentCoordinator(DataUpdateCoordinator):
         )
         self._exclude_recipients = parse_recipient_patterns(
             entry.options.get(CONF_EXCLUDE_RECIPIENTS)
+        )
+        self._hidden_shipments = parse_hidden_shipments(
+            entry.options.get(CONF_HIDDEN_SHIPMENTS)
         )
         # Allegro only: every order from the last fetch, including the ones
         # hidden because a carrier account already tracks the same parcel.
@@ -556,6 +563,7 @@ class ShipmentCoordinator(DataUpdateCoordinator):
             for parcel in parcels
             if isinstance(parcel, dict)
             and not is_delivered(parcel, self.courier)
+            and not is_hidden_shipment(parcel, self.courier, self._hidden_shipments)
             and matches_recipient_filters(
                 parcel, self._include_recipients, self._exclude_recipients
             )
@@ -570,6 +578,23 @@ class ShipmentCoordinator(DataUpdateCoordinator):
                 if not (get_parcel_tracking_numbers(parcel, self.courier) & tracked)
             ]
         return active
+
+    @callback
+    def async_hide_shipment(self, tracking_number: str) -> None:
+        """Add a parcel to the account's hidden shipments option.
+
+        Updating the options reloads the entry, which drops the parcel's
+        sensor and buttons. Removing the number in Configure shows it again.
+        """
+        current = self.entry.options.get(CONF_HIDDEN_SHIPMENTS, "")
+        updated = add_hidden_shipment(current, tracking_number)
+        if updated == current:
+            return
+        _LOGGER.debug("Hiding shipment %s (%s)", tracking_number, self.courier)
+        self.hass.config_entries.async_update_entry(
+            self.entry,
+            options={**self.entry.options, CONF_HIDDEN_SHIPMENTS: updated},
+        )
 
     async def async_refresh_parcel(self, tracking_number: str) -> None:
         """Refresh a single parcel when courier API supports it.

@@ -27,6 +27,7 @@ from .const import (
     CONF_CALLBACK_URL,
     CONF_INCLUDE_RECIPIENTS,
     CONF_EXCLUDE_RECIPIENTS,
+    CONF_HIDDEN_SHIPMENTS,
 )
 from .api_helpers import normalize_phone
 from .helpers import get_account_label
@@ -406,7 +407,7 @@ class ShipmentTrackingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class ShipmentTrackingOptionsFlow(config_entries.OptionsFlow):
-    """Per-account options: recipient filters, and the Allegro session cookie."""
+    """Per-account options: recipient filters, hidden shipments, Allegro cookie."""
 
     async def async_step_init(self, user_input=None):
         errors = {}
@@ -431,6 +432,7 @@ class ShipmentTrackingOptionsFlow(config_entries.OptionsFlow):
                     data={
                         CONF_INCLUDE_RECIPIENTS: user_input.get(CONF_INCLUDE_RECIPIENTS, "").strip(),
                         CONF_EXCLUDE_RECIPIENTS: user_input.get(CONF_EXCLUDE_RECIPIENTS, "").strip(),
+                        CONF_HIDDEN_SHIPMENTS: user_input.get(CONF_HIDDEN_SHIPMENTS, "").strip(),
                     },
                 )
 
@@ -445,6 +447,10 @@ class ShipmentTrackingOptionsFlow(config_entries.OptionsFlow):
             vol.Optional(
                 CONF_EXCLUDE_RECIPIENTS,
                 description={"suggested_value": entry.options.get(CONF_EXCLUDE_RECIPIENTS, "")},
+            ): multiline,
+            vol.Optional(
+                CONF_HIDDEN_SHIPMENTS,
+                description={"suggested_value": entry.options.get(CONF_HIDDEN_SHIPMENTS, "")},
             ): multiline,
         }
         if is_allegro:

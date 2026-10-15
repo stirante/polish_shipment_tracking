@@ -814,6 +814,35 @@ def parse_recipient_patterns(value) -> list[str]:
     return [part.strip() for part in parts if part and part.strip()]
 
 
+def parse_hidden_shipments(value) -> set[str]:
+    """Split the hidden shipments option into normalized tracking numbers."""
+    return {
+        number
+        for number in map(normalize_tracking_number, parse_recipient_patterns(value))
+        if number
+    }
+
+
+def add_hidden_shipment(value, tracking_number) -> str:
+    """Return the option text with one more hidden tracking number appended."""
+    lines = parse_recipient_patterns(value)
+    number = normalize_tracking_number(tracking_number)
+    if number and number not in {normalize_tracking_number(line) for line in lines}:
+        lines.append(str(tracking_number).strip())
+    return "\n".join(lines)
+
+
+def is_hidden_shipment(parcel: dict, courier: str, hidden: set[str]) -> bool:
+    """True when any tracking number of the parcel was hidden by the user."""
+    if not hidden or not isinstance(parcel, dict):
+        return False
+    numbers = set(get_parcel_tracking_numbers(parcel, courier))
+    parcel_id = normalize_tracking_number(get_parcel_id(parcel, courier))
+    if parcel_id:
+        numbers.add(parcel_id)
+    return bool(numbers & hidden)
+
+
 def _digits(text: str) -> str:
     return "".join(ch for ch in str(text) if ch.isdigit())
 

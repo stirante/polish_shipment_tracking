@@ -122,6 +122,18 @@ polskie znaki nie mają znaczenia. Paczka jest ukrywana tylko wtedy, gdy
 przewoźnik podaje dane, które pozwalają to rozstrzygnąć. Na przykład wzorzec
 telefonu nie ukryje paczki, dla której przewoźnik nie podaje numeru odbiorcy.
 
+### Ukrywanie wybranych przesyłek
+
+Pojedynczą przesyłkę można ukryć ręcznie:
+
+- przyciskiem `Ukryj przesyłkę` (ikona oka) w oknie szczegółów na karcie,
+- przyciskiem `Hide shipment <numer>` na urządzeniu konta (także z automatyzacji),
+- wpisując numer w polu „Ukryte przesyłki” w opcjach konta (Konfiguruj).
+
+Ukryta przesyłka znika z sensorów, liczników i karty, ale nie generuje zdarzenia
+`polish_shipment_tracking_shipment_removed`. Aby ją przywrócić, usuń jej numer
+z pola „Ukryte przesyłki”.
+
 ## Encje
 
 Integracja tworzy encję `sensor` dla każdej aktywnej (niedostarczonej) przesyłki.

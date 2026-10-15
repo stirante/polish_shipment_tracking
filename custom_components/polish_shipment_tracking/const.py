@@ -24,6 +24,8 @@ CONF_CALLBACK_URL = "callback_url"
 # Options: recipient filters (one pattern per line or comma separated).
 CONF_INCLUDE_RECIPIENTS = "include_recipients"
 CONF_EXCLUDE_RECIPIENTS = "exclude_recipients"
+# Options: tracking numbers the user hid by hand (one per line or comma separated).
+CONF_HIDDEN_SHIPMENTS = "hidden_shipments"
 
 # Fired by carrier coordinators so Allegro can re-check which orders are
 # already tracked by a carrier account.

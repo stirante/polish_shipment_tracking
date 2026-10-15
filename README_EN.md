@@ -124,6 +124,18 @@ characters are ignored. A parcel is hidden only when the carrier provides data
 to decide on. For example, a phone pattern does not hide a parcel whose carrier
 does not report the recipient phone number.
 
+### Hiding individual shipments
+
+A single shipment can be hidden by hand:
+
+- with the `Hide shipment` button (eye icon) in the card's details dialog,
+- with the `Hide shipment <number>` button on the account device (also from automations),
+- by adding its number to the "Hidden shipments" field in the account options (Configure).
+
+A hidden shipment disappears from sensors, counters and the card, but does not
+fire `polish_shipment_tracking_shipment_removed`. To show it again, remove its
+number from the "Hidden shipments" field.
+
 ## Entities
 
 The integration creates one `sensor` per active (not delivered) shipment.

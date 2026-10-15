@@ -51,6 +51,12 @@ async def async_setup_entry(
 
             new_buttons.append(RefreshShipmentButton(coordinator, pid))
 
+        for pid in current_ids:
+            unique_id = _get_hide_unique_id(coordinator.courier, pid)
+            existing_entity_id = registry.async_get_entity_id("button", DOMAIN, unique_id)
+            if _should_add_runtime_entity(hass, registry, entry, existing_entity_id):
+                new_buttons.append(HideShipmentButton(coordinator, pid))
+
         if new_buttons:
             async_add_entities(new_buttons)
 
@@ -86,6 +92,7 @@ def _async_remove_old_parcel_buttons(
     """Remove per-parcel buttons that no longer match active shipments."""
     registry = async_get_entity_registry(hass)
     current_unique_ids = {_get_refresh_unique_id(coordinator.courier, pid) for pid in current_ids}
+    current_unique_ids |= {_get_hide_unique_id(coordinator.courier, pid) for pid in current_ids}
     if coordinator.courier == "dpd":
         current_unique_ids |= {_get_manage_unique_id(coordinator.courier, pid) for pid in current_ids}
 
@@ -96,7 +103,7 @@ def _async_remove_old_parcel_buttons(
             entity_entry.platform == DOMAIN
             and entity_entry.config_entry_id == entry.entry_id
             and entity_entry.entity_id.startswith("button.")
-            and (unique_id.endswith("_refresh") or unique_id.endswith("_manage"))
+            and unique_id.endswith(("_refresh", "_manage", "_hide"))
             and unique_id not in current_unique_ids
         ):
             entities_to_remove.append(entity_entry.entity_id)
@@ -135,6 +142,10 @@ def _get_refresh_unique_id(courier: str, tracking_number: str) -> str:
 
 def _get_manage_unique_id(courier: str, tracking_number: str) -> str:
     return f"{courier}_{tracking_number}_manage"
+
+
+def _get_hide_unique_id(courier: str, tracking_number: str) -> str:
+    return f"{courier}_{tracking_number}_hide"
 
 
 def _build_device_info(coordinator: ShipmentCoordinator) -> DeviceInfo:
@@ -283,4 +294,33 @@ class ManageShipmentButton(CoordinatorEntity[ShipmentCoordinator], ButtonEntity)
             "courier": self.coordinator.courier,
             "tracking_number": self._tracking_number,
             "action": "manage_url",
+        }
+
+
+class HideShipmentButton(CoordinatorEntity[ShipmentCoordinator], ButtonEntity):
+    """Button to hide a shipment the user no longer wants to track."""
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:eye-off-outline"
+
+    def __init__(self, coordinator: ShipmentCoordinator, tracking_number: str) -> None:
+        """Initialize the per-shipment hide button."""
+        super().__init__(coordinator)
+        self._tracking_number = tracking_number
+        self._attr_name = f"Hide shipment {tracking_number}"
+        self._attr_unique_id = _get_hide_unique_id(coordinator.courier, tracking_number)
+        self._attr_device_info = _build_device_info(coordinator)
+
+    async def async_press(self) -> None:
+        """Add this shipment to the account's hidden shipments."""
+        self.coordinator.async_hide_shipment(self._tracking_number)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return attributes for card discovery."""
+        return {
+            "integration_domain": DOMAIN,
+            "courier": self.coordinator.courier,
+            "tracking_number": self._tracking_number,
+            "action": "hide",
         }
