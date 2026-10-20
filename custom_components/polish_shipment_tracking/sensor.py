@@ -369,6 +369,8 @@ class ShipmentSensor(CoordinatorEntity[ShipmentCoordinator], SensorEntity):
             self._add_gls_attributes(attrs)
         elif self._courier == "allegro":
             self._add_allegro_attributes(attrs)
+        elif self._courier == "orlen":
+            self._add_orlen_attributes(attrs)
 
         if self._courier != "allegro":
             self._add_allegro_order_attributes(attrs)
@@ -622,6 +624,21 @@ class ShipmentSensor(CoordinatorEntity[ShipmentCoordinator], SensorEntity):
         history = self.parcel_data.get("history")
         if isinstance(history, list):
             attrs["history"] = history
+
+    def _add_orlen_attributes(self, attrs: dict) -> None:
+        """Add ORLEN Paczka attributes (pickup point + collection PIN)."""
+        data = self.parcel_data
+        mapping = {
+            "sender": "sender",
+            "pickup_code": "pickup_code",
+            "pickup_point_name": "pickup_point_name",
+            "location": "location",
+            "statusname": "current_step",
+            "proposed_delivery_date": "estimated_delivery",
+        }
+        for src, dst in mapping.items():
+            if data.get(src):
+                attrs[dst] = data[src]
 
     def _add_gls_attributes(self, attrs: dict) -> None:
         """Add GLS specific attributes."""

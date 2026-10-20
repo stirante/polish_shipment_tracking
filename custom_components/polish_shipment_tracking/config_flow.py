@@ -34,7 +34,7 @@ from .helpers import get_account_label
 
 _LOGGER = logging.getLogger(__name__)
 
-COURIERS = ["inpost", "dpd", "dhl", "pocztex", "gls", "allegro"]
+COURIERS = ["inpost", "dpd", "dhl", "pocztex", "gls", "allegro", "orlen"]
 
 # hassfest rejects URLs inside translation strings.
 ALLEGRO_PLACEHOLDERS = {"allegro_url": "https://allegro.pl"}
@@ -102,6 +102,11 @@ class ShipmentTrackingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     from .api_dpd import DpdApi
                     self.api_instance = DpdApi(session)
                     await self.api_instance.send_sms_code(self.phone)
+
+                elif self.courier == "orlen":
+                    from .api_orlen import OrlenApi
+                    self.api_instance = OrlenApi(session)
+                    await self.api_instance.send_code(self.phone, self.device_uid)
 
                 elif self.courier == "dhl":
                     from .api_dhl import DhlApi
@@ -363,7 +368,12 @@ class ShipmentTrackingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             try:
                 tokens = {}
 
-                if self.courier == "dpd":
+                if self.courier == "orlen":
+                    from .api_orlen import OrlenApi
+                    api = OrlenApi(session)
+                    await api.confirm_code(self.phone, self.device_uid, code)
+
+                elif self.courier == "dpd":
                     from .api_dpd import DpdApi
                     api = DpdApi(session)
                     data = await api.register_with_code(self.phone, code)

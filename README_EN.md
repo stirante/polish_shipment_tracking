@@ -30,6 +30,7 @@ Home Assistant integration for tracking shipments from popular carriers in Polan
 - Pocztex
 - GLS
 - Allegro (orders, experimental)
+- ORLEN Paczka
 
 > [!WARNING]
 > The integration relies on unofficial APIs used by carrier apps/services. These APIs may change without notice.
@@ -109,6 +110,18 @@ pickup point. When a carrier account (for example InPost) already tracks the
 parcel, no Allegro sensor is created. Instead, the carrier parcel gets
 `allegro_items`, `allegro_seller`, `allegro_order_id` and other attributes, and
 the card shows the ordered products.
+
+### ORLEN Paczka
+
+Signs in like the ORLEN Paczka app: enter your phone number, get an SMS code
+and type it in (the same as DPD). The phone number is the account id.
+
+Only **incoming** (received) parcels are shown, not ones you send. Each parcel
+has its status, pickup point (locker or point), collection code (PIN) and
+sender.
+
+Adding an account registers Home Assistant as another device, so the phone app
+keeps working (ORLEN allows several devices).
 
 ### Recipient filters
 

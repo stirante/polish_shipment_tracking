@@ -30,6 +30,7 @@ Integracja dla Home Assistant do śledzenia przesyłek u popularnych przewoźnik
 - Pocztex
 - GLS
 - Allegro (zamówienia, eksperymentalne)
+- ORLEN Paczka
 
 > [!WARNING]
 > Integracja korzysta z nieoficjalnych API aplikacji/serwisów przewoźników. Te API mogą ulec zmianie bez uprzedzenia.
@@ -107,6 +108,19 @@ czasu i punktem odbioru. Jeśli paczkę z zamówienia śledzi już konto kuriera
 (np. InPost), sensor Allegro nie powstaje. Zamiast tego paczka kuriera dostaje
 atrybuty `allegro_items`, `allegro_seller`, `allegro_order_id` i inne, a karta
 pokazuje zamówione produkty.
+
+### ORLEN Paczka
+
+Logowanie jak w aplikacji ORLEN Paczka: podajesz numer telefonu, dostajesz kod
+SMS i go wpisujesz (tak samo jak w DPD). Numer telefonu jest identyfikatorem
+konta.
+
+Pokazywane są tylko przesyłki **przychodzące** (odbierane), a nie nadawane przez
+Ciebie. Dla każdej przesyłki widać status, punkt odbioru (automat lub punkt),
+kod odbioru (PIN) oraz nadawcę.
+
+Dodanie konta rejestruje Home Assistant jako kolejne urządzenie, więc aplikacja
+na telefonie działa dalej (ORLEN pozwala na wiele urządzeń).
 
 ### Filtry odbiorcy
 

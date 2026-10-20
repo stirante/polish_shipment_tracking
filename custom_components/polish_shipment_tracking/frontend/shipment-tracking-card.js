@@ -1053,6 +1053,7 @@ class ShipmentTrackingCard extends HTMLElement {
     if (n.includes('dhl') || n.includes('ups') || n.includes('fedex')) return 'mdi:truck-fast';
     if (n.includes('gls')) return 'mdi:truck-delivery-outline';
     if (n.includes('allegro')) return 'mdi:shopping-outline';
+    if (n.includes('orlen')) return 'mdi:gas-station-outline';
     if (n.includes('pocztex') || n.includes('poczta')) return 'mdi:post-outline';
     return 'mdi:package-variant-closed';
   }

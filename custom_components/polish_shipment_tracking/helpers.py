@@ -15,6 +15,8 @@ def get_parcel_id(data: dict, courier: str) -> str | None:
         return _pick_gls_id(data)
     if courier == "allegro":
         return data.get("orderId")
+    if courier == "orlen":
+        return data.get("barcode")
     return None
 
 def get_parcel_detail_id(data: dict, courier: str) -> str | None:
@@ -100,6 +102,8 @@ def get_raw_status(parcel_data: dict, courier: str) -> str | None:
         return _pick_gls_status(parcel_data)
     if courier == "allegro":
         return parcel_data.get("status")
+    if courier == "orlen":
+        return parcel_data.get("statusid")
     return None
 
 def _pick_pocztex_status(parcel_data):
@@ -166,6 +170,28 @@ def _pick_gls_status(parcel_data):
     return None
 
 _STATUS_MAP = {
+    "orlen": {
+        # statusid values from the ORLEN Paczka account API.
+        "CREATED": "created",
+        "PRESHIPMENT": "created",
+        "WAITING": "created",
+        "SENT": "in_transport",
+        "INTRANSIT": "in_transport",
+        "INBOX": "in_transport",
+        "SORTINGCENTER": "in_transport",
+        "DELIVERYBRANCH": "in_transport",
+        "COURIERCOLLECTED": "in_transport",
+        "COURIERDEPOSIT": "in_transport",
+        "DEPOSITED": "waiting_for_pickup",
+        "CUSTOMERCOLLECTION_PUDO": "delivered",
+        "CUSTOMERREMOTEOPENINGCOLLECTION": "delivered",
+        "COLLECTED": "delivered",
+        "EXPIRED": "returned",
+        "RETURNED": "returned",
+        "CANCELLED": "cancelled",
+        "PROBLEM": "exception",
+        "FAILEDPARCELCOLLECTION": "exception",
+    },
     "inpost": {
         "CREATED": "created",
         "CONFIRMED": "created",
@@ -453,7 +479,7 @@ def is_delivered(data: dict, courier: str) -> bool:
     # otherwise normalize to "unknown" and resurface the parcel as active.
     # Parcels that merely lack a state (e.g. still awaiting the first scan)
     # keep archived=false and must stay active.
-    if courier == "pocztex" and data.get("archived") is True:
+    if courier in ("pocztex", "orlen") and data.get("archived") is True:
         return True
     status_key = normalize_status(get_raw_status(data, courier), courier)
     return status_key in {"delivered", "returned", "cancelled"}

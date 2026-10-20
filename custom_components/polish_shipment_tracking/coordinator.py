@@ -25,6 +25,7 @@ from .const import (
     CONF_REFRESH_EXPIRES_AT,
     CONF_COURIER,
     CONF_DEVICE_UID,
+    CONF_PHONE,
     CONF_ID_TOKEN,
     CONF_SESSION_ID,
     CONF_SESSION_REGISTERED,
@@ -341,6 +342,10 @@ class ShipmentCoordinator(DataUpdateCoordinator):
         elif self.courier == "allegro":
             from .api_allegro import AllegroApi
             return AllegroApi(self.session, data.get(CONF_COOKIE))
+
+        elif self.courier == "orlen":
+            from .api_orlen import OrlenApi
+            return OrlenApi(self.session, phone=data.get(CONF_PHONE), device_id=device_uid)
         return None
 
     async def _async_update_data(self):
@@ -541,6 +546,9 @@ class ShipmentCoordinator(DataUpdateCoordinator):
             self.allegro_orders = list(await asyncio.gather(*(_with_details(order) for order in orders)))
             return self.allegro_orders
 
+        elif self.courier == "orlen":
+            return await self.api.get_parcels()
+
         return []
 
     async def _enrich_parcels_with_details(self, parcels):
@@ -611,6 +619,9 @@ class ShipmentCoordinator(DataUpdateCoordinator):
 
     async def _fetch_single_parcel(self, tracking_number: str):
         """Fetch a single parcel details for couriers that support it."""
+        if self.courier == "orlen":
+            return await self.api.get_parcel(tracking_number)
+
         if self.courier in {"inpost", "dpd", "dhl", "gls"}:
             if not hasattr(self.api, "get_parcel"):
                 return None
