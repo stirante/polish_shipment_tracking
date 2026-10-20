@@ -19,7 +19,7 @@ import time
 
 import aiohttp
 
-from .api_helpers import request_json
+from .api_helpers import normalize_phone, request_json
 
 # Azure AD app credentials embedded in the ORLEN Paczka app (same for every
 # install). Used only to obtain the gateway token the app itself uses.
@@ -113,8 +113,8 @@ class OrlenApi:
         for p in _unwrap(data):
             if not isinstance(p, dict):
                 continue
-            receiver_phone = str((p.get("receiver") or {}).get("phone") or "")
-            if receiver_phone != str(self._phone):
+            receiver_phone = normalize_phone((p.get("receiver") or {}).get("phone") or "")
+            if receiver_phone != normalize_phone(self._phone or ""):
                 continue  # outgoing parcel sent by this account
             parcels.append(self._normalize(p))
         return parcels
