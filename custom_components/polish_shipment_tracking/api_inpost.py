@@ -242,18 +242,19 @@ class InPostApi:
             else:
                 break
 
-        # Deduplicate parcels while preserving order
-        seen = set()
+        # Deduplicate parcels while preserving order. Later pages hold
+        # parcels updated after the earlier ones, so the last copy wins.
+        index_by_id = {}
         unique_parcels = []
         for p in all_parcels:
             if isinstance(p, dict):
                 pid = p.get("shipmentNumber")
+                if pid and pid in index_by_id:
+                    unique_parcels[index_by_id[pid]] = p
+                    continue
                 if pid:
-                    if pid not in seen:
-                        seen.add(pid)
-                        unique_parcels.append(p)
-                else:
-                    unique_parcels.append(p)
+                    index_by_id[pid] = len(unique_parcels)
+                unique_parcels.append(p)
 
         return unique_parcels
 

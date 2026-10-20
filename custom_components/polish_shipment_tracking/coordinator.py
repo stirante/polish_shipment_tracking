@@ -147,6 +147,9 @@ def _get_stale_label_date(parcel: dict) -> datetime | None:
 
 def is_dead_label(parcel: dict, courier: str, threshold: timedelta = DEAD_LABEL_THRESHOLD) -> bool:
     """Check if parcel is a stale/dead label (CONFIRMED/CREATED) without courier movement."""
+    # Only InPost keeps labels that were never sent on the tracked list.
+    if courier != "inpost":
+        return False
     raw_status = str(get_raw_status(parcel, courier) or "").strip().upper()
     status_key = normalize_status(raw_status, courier)
 
