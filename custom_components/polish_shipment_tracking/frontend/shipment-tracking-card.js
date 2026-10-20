@@ -1480,9 +1480,15 @@ class ShipmentTrackingCard extends HTMLElement {
           }
         }
 
-        const qrPayload = courier === 'inpost'
-          ? raw.qrCode
-          : (courier === 'dhl' && ['LOCKER', 'POP'].includes(String(raw.packageType || '').toUpperCase()) ? raw.qrCode : null);
+        let qrPayload = null;
+        if (courier === 'inpost') {
+          qrPayload = raw.qrCode;
+        } else if (courier === 'dhl' && ['LOCKER', 'POP'].includes(String(raw.packageType || '').toUpperCase())) {
+          qrPayload = raw.qrCode;
+        } else if (courier === 'allegro') {
+          const waybills = raw.delivery?.waybillsData?.waybills || raw.status?.primary?.waybillsData?.waybills || [];
+          qrPayload = waybills.map(w => w?.pickupCode?.qrCode).find(Boolean) || null;
+        }
         if (this._isEnabled("show_dialog_qr_code") && qrPayload && attrs.status_key === 'waiting_for_pickup') {
            const qrUrlSmall = `https://quickchart.io/qr?text=${encodeURIComponent(qrPayload)}&size=150&margin=0&ecLevel=H`;
            const qrUrlLarge = `https://quickchart.io/qr?text=${encodeURIComponent(qrPayload)}&size=500&margin=0&ecLevel=H`;
