@@ -105,6 +105,13 @@ session (the `QXLSESSID` cookie):
 When the session expires, Home Assistant shows a reauthentication notification.
 Paste a new cookie there.
 
+The Allegro account options (Configure) have a **discreet mode**. When it is
+on, products, images, prices and the order total are removed from every entity
+(including the `allegro_*` attributes of carrier parcels and `raw_response`).
+Delivery details stay: status, carrier, waybill, pickup point, pickup code,
+timeline and seller. Existing entities keep their `entity_id`, which may have
+been made from a product name.
+
 Every Allegro order is a separate sensor with products, seller, timeline and
 pickup point. When a carrier account (for example InPost) already tracks the
 parcel, no Allegro sensor is created. Instead, the carrier parcel gets

@@ -33,6 +33,7 @@ from .const import (
     CONF_INCLUDE_RECIPIENTS,
     CONF_EXCLUDE_RECIPIENTS,
     CONF_HIDDEN_SHIPMENTS,
+    CONF_ALLEGRO_DISCREET,
     SIGNAL_PARCELS_UPDATED,
     SIGNAL_ALLEGRO_ORDERS_UPDATED,
 )
@@ -56,6 +57,7 @@ from .helpers import (
     parse_recipient_patterns,
     restore_allegro_parcels,
     reconcile_departed_parcels,
+    strip_allegro_order,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -224,6 +226,7 @@ class ShipmentCoordinator(DataUpdateCoordinator):
         # Allegro only: every order from the last fetch, including the ones
         # hidden because a carrier account already tracks the same parcel.
         self.allegro_orders: list[dict] = []
+        self._allegro_discreet = bool(entry.options.get(CONF_ALLEGRO_DISCREET))
 
         super().__init__(
             hass,
@@ -558,6 +561,8 @@ class ShipmentCoordinator(DataUpdateCoordinator):
             if not isinstance(data, dict):
                 raise Exception(f"Allegro API Error: unexpected orders response: {str(data)[:200]}")
             orders = normalize_allegro_orders(data)
+            if self._allegro_discreet:
+                orders = [strip_allegro_order(order) for order in orders]
             # Recipient data (for the filters) and the timeline only come with
             # the per-order details, so fetch them for orders still under way.
             semaphore = asyncio.Semaphore(5)

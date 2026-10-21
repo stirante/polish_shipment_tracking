@@ -28,6 +28,7 @@ from .const import (
     CONF_INCLUDE_RECIPIENTS,
     CONF_EXCLUDE_RECIPIENTS,
     CONF_HIDDEN_SHIPMENTS,
+    CONF_ALLEGRO_DISCREET,
 )
 from .api_helpers import normalize_phone
 from .helpers import get_account_label
@@ -440,14 +441,14 @@ class ShipmentTrackingOptionsFlow(config_entries.OptionsFlow):
                         entry, data={**entry.data, CONF_COOKIE: new_cookie}
                     )
             if not errors:
-                return self.async_create_entry(
-                    title="",
-                    data={
-                        CONF_INCLUDE_RECIPIENTS: user_input.get(CONF_INCLUDE_RECIPIENTS, "").strip(),
-                        CONF_EXCLUDE_RECIPIENTS: user_input.get(CONF_EXCLUDE_RECIPIENTS, "").strip(),
-                        CONF_HIDDEN_SHIPMENTS: user_input.get(CONF_HIDDEN_SHIPMENTS, "").strip(),
-                    },
-                )
+                options = {
+                    CONF_INCLUDE_RECIPIENTS: user_input.get(CONF_INCLUDE_RECIPIENTS, "").strip(),
+                    CONF_EXCLUDE_RECIPIENTS: user_input.get(CONF_EXCLUDE_RECIPIENTS, "").strip(),
+                    CONF_HIDDEN_SHIPMENTS: user_input.get(CONF_HIDDEN_SHIPMENTS, "").strip(),
+                }
+                if is_allegro:
+                    options[CONF_ALLEGRO_DISCREET] = bool(user_input.get(CONF_ALLEGRO_DISCREET, False))
+                return self.async_create_entry(title="", data=options)
 
         # suggested_value rather than default: with a default, clearing the
         # field submits nothing and the old value comes back.
@@ -467,6 +468,10 @@ class ShipmentTrackingOptionsFlow(config_entries.OptionsFlow):
             ): multiline,
         }
         if is_allegro:
+            schema[vol.Optional(
+                CONF_ALLEGRO_DISCREET,
+                default=bool(entry.options.get(CONF_ALLEGRO_DISCREET, False)),
+            )] = bool
             schema[vol.Optional(CONF_COOKIE)] = str
 
         return self.async_show_form(

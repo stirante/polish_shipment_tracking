@@ -103,6 +103,13 @@ z przeglądarki (ciasteczko `QXLSESSID`):
 Gdy sesja wygaśnie, Home Assistant pokaże powiadomienie o ponownym
 uwierzytelnieniu. Wystarczy wtedy wkleić nowe ciasteczko.
 
+W opcjach konta Allegro (Konfiguruj) można włączyć **tryb dyskretny**. Wtedy
+produkty, zdjęcia, ceny i suma zamówienia są usuwane ze wszystkich encji (także
+z atrybutów `allegro_*` paczek kurierów i z `raw_response`). Zostają dane
+dostawy: status, przewoźnik, numer przesyłki, punkt odbioru, kod odbioru, oś
+czasu i sprzedawca. Istniejące encje zachowują swoje `entity_id`, które mogło
+powstać z nazwy produktu.
+
 Każde zamówienie Allegro jest osobnym sensorem z produktami, sprzedawcą, osią
 czasu i punktem odbioru. Jeśli paczkę z zamówienia śledzi już konto kuriera
 (np. InPost), sensor Allegro nie powstaje. Zamiast tego paczka kuriera dostaje

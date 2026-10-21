@@ -26,6 +26,8 @@ CONF_INCLUDE_RECIPIENTS = "include_recipients"
 CONF_EXCLUDE_RECIPIENTS = "exclude_recipients"
 # Options: tracking numbers the user hid by hand (one per line or comma separated).
 CONF_HIDDEN_SHIPMENTS = "hidden_shipments"
+# Options (Allegro): drop products and prices from orders, keep delivery details.
+CONF_ALLEGRO_DISCREET = "allegro_discreet"
 
 # Fired by carrier coordinators so Allegro can re-check which orders are
 # already tracked by a carrier account.

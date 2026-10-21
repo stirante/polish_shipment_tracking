@@ -696,6 +696,35 @@ def normalize_allegro_orders(payload) -> list[dict]:
     return parcels
 
 
+# Raw order fields the card and the attributes still need in discreet mode.
+_ALLEGRO_DISCREET_RAW_KEYS = ("id", "status", "delivery", "cancelled", "orderDate", "hiddenInMyOrders")
+# Raw keys that hold products or money anywhere in the order tree.
+_ALLEGRO_PRICE_KEY_PARTS = ("offer", "price", "cost", "amount", "payment", "money", "product", "item")
+
+
+def _strip_allegro_prices(value):
+    if isinstance(value, dict):
+        return {
+            key: _strip_allegro_prices(item)
+            for key, item in value.items()
+            if not any(part in str(key).lower() for part in _ALLEGRO_PRICE_KEY_PARTS)
+        }
+    if isinstance(value, list):
+        return [_strip_allegro_prices(item) for item in value]
+    return value
+
+
+def strip_allegro_order(parcel: dict) -> dict:
+    """Drop what was bought and what it cost, keeping delivery details."""
+    stripped = {key: value for key, value in parcel.items() if key not in ("offers", "totalCost")}
+    raw = parcel.get("_raw_response")
+    if isinstance(raw, dict):
+        stripped["_raw_response"] = _strip_allegro_prices(
+            {key: raw[key] for key in _ALLEGRO_DISCREET_RAW_KEYS if key in raw}
+        )
+    return stripped
+
+
 def merge_allegro_details(parcel: dict, details) -> dict:
     """Add recipient, timeline and point coordinates from the order details call."""
     if not isinstance(details, dict):
