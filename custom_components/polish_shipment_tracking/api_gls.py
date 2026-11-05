@@ -148,8 +148,8 @@ class GlsApi:
 
     async def get_parcels(self, page: int = 0, limit: int = 100, archive: bool = False):
         """Return the logged-in shipment list."""
-        query = urlencode({"limit": limit, "page": page, "archive": str(archive).lower()})
-        return await self.request("GET", f"{self.TRACKING_SHIPMENT_URL}?{query}")
+        query = urlencode({"size": limit, "page": page, "archive": str(archive).lower()})
+        return await self.request("GET", f"{self.TRACKING_SHIPMENT_URL}/paged?{query}")
 
     async def get_parcel(self, tracking_uid: str, archive: bool = False):
         """Return details for a specific trackingUid from the shipment list."""

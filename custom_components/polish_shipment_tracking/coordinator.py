@@ -372,6 +372,8 @@ class ShipmentCoordinator(DataUpdateCoordinator):
                 raise ConfigEntryAuthFailed(
                     "Allegro session expired, paste a new QXLSESSID cookie"
                 ) from err
+            # A token refreshed before the failure must survive a restart.
+            self._persist_auth_if_changed()
             _LOGGER.error("Error fetching data for %s: %s", self.courier, err)
             raise UpdateFailed(f"Error communicating with API: {err}")
 
