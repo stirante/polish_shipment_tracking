@@ -14,6 +14,7 @@ HELPERS = runpy.run_path(
     )
 )
 count_ready_for_pickup = HELPERS["count_ready_for_pickup"]
+get_counted_parcels = HELPERS["get_counted_parcels"]
 
 
 class ReadyForPickupCountTests(unittest.TestCase):
@@ -29,6 +30,19 @@ class ReadyForPickupCountTests(unittest.TestCase):
                 [{"waybill": "dpd-1", "main_status": {"status": "READY_TO_PICK_UP"}}],
                 "dpd",
             ),
+            1,
+        )
+
+    def test_parcel_shared_with_another_account_is_counted_once(self):
+        shared = {"shipmentNumber": "shared", "status": "READY_TO_PICKUP"}
+        own = {"shipmentNumber": "own", "status": "OUT_FOR_DELIVERY"}
+        delivered = {"shipmentNumber": "done", "status": "DELIVERED"}
+        # The shared parcel's sensor belongs to the owner account only.
+        owner = get_counted_parcels([shared, delivered], "inpost", {"shared", "done"})
+        recipient = get_counted_parcels([own, shared], "inpost", {"own"})
+        self.assertEqual(len(owner) + len(recipient), 2)
+        self.assertEqual(
+            count_ready_for_pickup(owner, "inpost") + count_ready_for_pickup(recipient, "inpost"),
             1,
         )
 

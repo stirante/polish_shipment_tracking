@@ -27,13 +27,20 @@ from .helpers import (
     is_delivered,
     normalize_status,
 )
-from .helpers import count_ready_for_pickup
+from .helpers import count_ready_for_pickup, get_counted_parcels
 
 _LOGGER = logging.getLogger(__name__)
 
 ACTIVE_SHIPMENTS_UNIQUE_ID = f"{DOMAIN}_active_shipments"
 READY_FOR_PICKUP_SHIPMENTS_UNIQUE_ID = f"{DOMAIN}_ready_for_pickup_shipments"
 SHARED_SENSOR_KEYS = ("_active_shipments_sensor", "_ready_for_pickup_shipments_sensor")
+
+
+def _counted_parcels(coordinator: ShipmentCoordinator) -> list[dict]:
+    """Parcels of this account that have a shipment sensor."""
+    return get_counted_parcels(
+        coordinator.data or [], coordinator.courier, coordinator.known_parcels
+    )
 
 
 def _account_ready_for_pickup_unique_id(entry: ConfigEntry) -> str:
@@ -124,28 +131,6 @@ async def async_setup_entry(
     domain_data.setdefault("_shared_sensor_hosts", {})[entry.entry_id] = (
         coordinator, async_add_entities
     )
-
-    # Shared count sensors aggregate all configured couriers and accounts.
-    global_entities = []
-    if "_shared_sensor_owner" not in domain_data:
-        global_sensor = ActiveShipmentsSensor(hass)
-        domain_data["_active_shipments_sensor"] = global_sensor
-        global_entities.append(global_sensor)
-        ready_global_sensor = ReadyForPickupShipmentsSensor(hass)
-        domain_data["_ready_for_pickup_shipments_sensor"] = ready_global_sensor
-        global_entities.append(ready_global_sensor)
-        domain_data["_shared_sensor_owner"] = entry.entry_id
-        _set_shared_sensor_registry_owner(hass, entry.entry_id)
-    global_entities.append(ReadyForPickupAccountSensor(coordinator))
-    async_add_entities(global_entities)
-
-    for key in SHARED_SENSOR_KEYS:
-        global_sensor = domain_data[key]
-        global_sensor.attach_coordinator(coordinator)
-        entry.async_on_unload(
-            lambda key=key: _detach_shared_sensor(domain_data, key, coordinator)
-        )
-    entry.async_on_unload(lambda: _shared_sensor_host_unloaded(hass, entry.entry_id))
 
     @callback
     def _build_new_shipment_event_data(sensor: "ShipmentSensor") -> dict[str, Any]:
@@ -243,6 +228,31 @@ async def async_setup_entry(
 
     entry.async_on_unload(coordinator.async_add_listener(async_update_parcels))
     async_update_parcels()
+
+    # Counters count the parcels this account shows, so add and attach them
+    # only after the parcel sync above: entities write their state as soon as
+    # they are added, and coordinator listeners run in registration order.
+    # The shared ones aggregate all configured couriers and accounts.
+    global_entities = []
+    if "_shared_sensor_owner" not in domain_data:
+        global_sensor = ActiveShipmentsSensor(hass)
+        domain_data["_active_shipments_sensor"] = global_sensor
+        global_entities.append(global_sensor)
+        ready_global_sensor = ReadyForPickupShipmentsSensor(hass)
+        domain_data["_ready_for_pickup_shipments_sensor"] = ready_global_sensor
+        global_entities.append(ready_global_sensor)
+        domain_data["_shared_sensor_owner"] = entry.entry_id
+        _set_shared_sensor_registry_owner(hass, entry.entry_id)
+    global_entities.append(ReadyForPickupAccountSensor(coordinator))
+    async_add_entities(global_entities)
+
+    for key in SHARED_SENSOR_KEYS:
+        global_sensor = domain_data[key]
+        global_sensor.attach_coordinator(coordinator)
+        entry.async_on_unload(
+            lambda key=key: _detach_shared_sensor(domain_data, key, coordinator)
+        )
+    entry.async_on_unload(lambda: _shared_sensor_host_unloaded(hass, entry.entry_id))
 
 def _async_remove_old_entities(
     hass: HomeAssistant,
@@ -809,10 +819,7 @@ class ActiveShipmentsSensor(SensorEntity):
         """Return the total count of active shipments."""
         total = 0
         for coordinator in self._coordinators:
-            data = coordinator.data or []
-            for parcel in data:
-                if not is_delivered(parcel, coordinator.courier):
-                    total += 1
+            total += len(_counted_parcels(coordinator))
         return total
 
 
@@ -827,7 +834,7 @@ class ReadyForPickupShipmentsSensor(ActiveShipmentsSensor):
     @property
     def native_value(self) -> int:
         return sum(
-            count_ready_for_pickup(coordinator.data or [], coordinator.courier)
+            count_ready_for_pickup(_counted_parcels(coordinator), coordinator.courier)
             for coordinator in self._coordinators
         )
 
@@ -847,7 +854,9 @@ class ReadyForPickupAccountSensor(CoordinatorEntity[ShipmentCoordinator], Sensor
 
     @property
     def native_value(self) -> int:
-        return count_ready_for_pickup(self.coordinator.data or [], self.coordinator.courier)
+        return count_ready_for_pickup(
+            _counted_parcels(self.coordinator), self.coordinator.courier
+        )
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
