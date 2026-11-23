@@ -228,6 +228,8 @@ async def async_setup_entry(
             # If HA isn't running yet, queue and flush after startup.
             if has_initialized:
                 for new_sensor in new_entities:
+                    if new_sensor._tracking_number in coordinator.renamed_parcels:
+                        continue
                     _queue_or_fire_event(
                         hass,
                         f"{DOMAIN}_new_shipment",
@@ -300,6 +302,9 @@ class ShipmentSensor(CoordinatorEntity[ShipmentCoordinator], SensorEntity):
             offers = parcel_data.get("offers") or []
             title = (offers[0].get("title") if offers and isinstance(offers[0], dict) else None) or tracking_number
             self._attr_name = str(title)[:60]
+            if parcel_data.get("parcelCount"):
+                # One sensor per parcel of an order sent in several parcels.
+                self._attr_name = f"{self._attr_name} ({parcel_data.get('parcelIndex')}/{parcel_data['parcelCount']})"
         self._attr_unique_id = f"{self._courier}_{tracking_number}"
         self._attr_translation_key = "shipment_status"
         self.parcel_data = parcel_data
@@ -572,6 +577,8 @@ class ShipmentSensor(CoordinatorEntity[ShipmentCoordinator], SensorEntity):
             attrs["status_label"] = data["statusLabel"]
         if data.get("deliveryName"):
             attrs["delivery_method"] = data["deliveryName"]
+        if data.get("deliveredBy"):
+            attrs["delivered_by"] = data["deliveredBy"]
         if data.get("pickupCode"):
             attrs["pickup_code"] = data["pickupCode"]
         if data.get("deliveryEstimate"):
@@ -586,12 +593,22 @@ class ShipmentSensor(CoordinatorEntity[ShipmentCoordinator], SensorEntity):
         if isinstance(recipient, dict) and recipient.get("name"):
             attrs["recipient_name"] = recipient["name"]
 
-        waybills = [w for w in data.get("waybills") or [] if isinstance(w, dict)]
+        waybills = []
+        for waybill in data.get("waybills") or []:
+            if not isinstance(waybill, dict):
+                continue
+            # The parcel's steps are already the sensor's own timeline.
+            waybills.append({
+                key: value for key, value in waybill.items() if value is not None and key != "timeline"
+            })
         if waybills:
             attrs["waybill"] = waybills[0].get("number")
             attrs["carrier"] = waybills[0].get("carrier_name") or waybills[0].get("carrier_id")
             attrs["tracking_url"] = waybills[0].get("url")
             attrs["waybills"] = waybills
+        if data.get("parcelCount"):
+            attrs["parcel_index"] = data.get("parcelIndex")
+            attrs["parcel_count"] = data["parcelCount"]
 
         point = data.get("pickupPoint")
         if isinstance(point, dict):

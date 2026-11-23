@@ -1151,6 +1151,7 @@ class ShipmentTrackingCard extends HTMLElement {
     }
 
     const LOGOS = {
+      'allegro one': 'https://a.allegroimg.com/original/1290dc/e7e2356c4e71897171bbcdd359d4',
       'inpost': 'https://upload.wikimedia.org/wikipedia/commons/c/c5/InPost_logo.svg',
       'dhl': 'https://upload.wikimedia.org/wikipedia/commons/a/ac/DHL_Logo.svg',
       'dpd': 'https://upload.wikimedia.org/wikipedia/commons/a/ab/DPD_logo_%282015%29.svg',
@@ -1486,8 +1487,11 @@ class ShipmentTrackingCard extends HTMLElement {
         } else if (courier === 'dhl' && ['LOCKER', 'POP'].includes(String(raw.packageType || '').toUpperCase())) {
           qrPayload = raw.qrCode;
         } else if (courier === 'allegro') {
+          const own = Array.isArray(attrs.waybills) ? attrs.waybills.find(w => w?.qr_code) : null;
           const waybills = raw.delivery?.waybillsData?.waybills || raw.status?.primary?.waybillsData?.waybills || [];
-          qrPayload = waybills.map(w => w?.pickupCode?.qrCode).find(Boolean) || null;
+          qrPayload = own?.qr_code
+            || (attrs.parcel_count ? null : waybills.map(w => w?.pickupCode?.qrCode).find(Boolean))
+            || null;
         }
         if (this._isEnabled("show_dialog_qr_code") && qrPayload && attrs.status_key === 'waiting_for_pickup') {
            const qrUrlSmall = `https://quickchart.io/qr?text=${encodeURIComponent(qrPayload)}&size=150&margin=0&ecLevel=H`;
@@ -1900,11 +1904,16 @@ class ShipmentTrackingCard extends HTMLElement {
         if (String(attributes.courier || '').toLowerCase() === 'allegro') {
           // Show the waybill instead of the long order UUID.
           line2 = attributes.waybill || "";
+          if (line2 && attributes.parcel_count) line2 += ` (${attributes.parcel_index}/${attributes.parcel_count})`;
         }
         const displayLine2 = line2 ? `<span dir="ltr">${line2}</span>` : "";
 
-        const imageUrl = this.getCourierImage(courier);
-        const iconMdi = attributes.icon || this.getCourierIcon(courier);
+        // Allegro orders are delivered by another carrier; show that carrier's logo.
+        // A logo configured for the account's own courier still wins.
+        const ownLogo = this.config.courier_logos?.[courier.toLowerCase()];
+        const logoSource = (!ownLogo && attributes.delivered_by) || courier;
+        const imageUrl = this.getCourierImage(logoSource);
+        const iconMdi = attributes.icon || this.getCourierIcon(logoSource);
 
         let iconHtml;
         if (imageUrl) {

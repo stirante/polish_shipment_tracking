@@ -38,6 +38,8 @@ from .const import (
 )
 from .api_inpost import InPostAuthError
 from .helpers import (
+    get_allegro_parcel_count,
+    get_renamed_parcel,
     get_parcel_detail_id,
     get_parcel_id,
     get_parcel_tracking_numbers,
@@ -48,9 +50,11 @@ from .helpers import (
     matches_recipient_filters,
     merge_allegro_details,
     normalize_allegro_orders,
+    split_allegro_order,
     normalize_status,
     parse_hidden_shipments,
     parse_recipient_patterns,
+    restore_allegro_parcels,
     reconcile_departed_parcels,
 )
 
@@ -167,6 +171,23 @@ def is_dead_label(parcel: dict, courier: str, threshold: timedelta = DEAD_LABEL_
     now = datetime.now(timezone.utc)
     return (now - label_date) > threshold
 
+# Allegro can call a split order delivered after its first parcel arrives;
+# fetch the per-parcel status of recent split orders before trusting that.
+_SPLIT_ORDER_RECHECK = timedelta(days=30)
+
+
+def _may_have_parcel_left(order: dict) -> bool:
+    if get_allegro_parcel_count(order) < 2 or order.get("status") == "ORDER_CANCELLED":
+        return False
+    try:
+        ordered = datetime.fromisoformat(str(order.get("orderDate")).replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if ordered.tzinfo is None:
+        ordered = ordered.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) - ordered < _SPLIT_ORDER_RECHECK
+
+
 class ShipmentCoordinator(DataUpdateCoordinator):
     """Class to manage fetching shipment data."""
 
@@ -175,6 +196,8 @@ class ShipmentCoordinator(DataUpdateCoordinator):
         self.entry = entry
         self.courier = entry.data[CONF_COURIER]
         self.known_parcels = set()
+        # Allegro parcels that only changed id on the last poll, so are not new.
+        self.renamed_parcels: set[str] = set()
         self.pending_lifecycle_events: list[tuple[str, dict]] = []
         self._missing_parcel_counts: dict[str, int] = {}
         self.add_entities_callback = None
@@ -194,6 +217,10 @@ class ShipmentCoordinator(DataUpdateCoordinator):
         # Every number the hidden parcels are known under, so Allegro does
         # not show them again as its own orders.
         self.hidden_tracking_numbers: set[str] = set(self._hidden_shipments)
+        # Delivered parcels in this account's feed: Allegro often reports one
+        # as under way after the carrier has delivered it. Parcels dropped for
+        # other reasons (filters, stale labels) must still show in Allegro.
+        self.delivered_tracking_numbers: set[str] = set()
         # Allegro only: every order from the last fetch, including the ones
         # hidden because a carrier account already tracks the same parcel.
         self.allegro_orders: list[dict] = []
@@ -254,8 +281,10 @@ class ShipmentCoordinator(DataUpdateCoordinator):
 
         Remembered after the carrier drops a parcel too: carriers usually
         report the pickup before Allegro does, and the order must not pop
-        back up as a new Allegro shipment in between. Parcels the user hid
-        in a carrier account count too, so they stay hidden in Allegro.
+        back up as a new Allegro shipment in between. Delivered parcels still
+        in the carrier feed count, so this also holds after a restart. Parcels
+        the user hid in a carrier account count too, so they stay hidden in
+        Allegro.
         """
         domain_data = self.hass.data.setdefault(DOMAIN, {})
         numbers: set[str] = domain_data.setdefault("_carrier_tracking_numbers", set())
@@ -263,6 +292,7 @@ class ShipmentCoordinator(DataUpdateCoordinator):
             if not isinstance(coordinator, ShipmentCoordinator) or coordinator.courier == "allegro":
                 continue
             numbers |= coordinator.hidden_tracking_numbers
+            numbers |= coordinator.delivered_tracking_numbers
             for parcel in coordinator.data or []:
                 numbers |= get_parcel_tracking_numbers(parcel, coordinator.courier)
         return numbers
@@ -533,7 +563,8 @@ class ShipmentCoordinator(DataUpdateCoordinator):
             semaphore = asyncio.Semaphore(5)
 
             async def _with_details(order):
-                if is_delivered(order, self.courier):
+                known = restore_allegro_parcels(order, self.allegro_orders)
+                if is_delivered(order, self.courier) and not _may_have_parcel_left(known):
                     return order
                 try:
                     async with semaphore:
@@ -542,10 +573,19 @@ class ShipmentCoordinator(DataUpdateCoordinator):
                     # Without details the recipient filters cannot see who the
                     # parcel is for, so this is worth surfacing.
                     _LOGGER.warning("Allegro order details failed for %s: %s", order["orderId"], err)
-                    return order
-                return merge_allegro_details(order, details)
+                    return known
+                detailed = merge_allegro_details(order, details)
+                if not any(waybill.get("status") for waybill in detailed.get("waybills") or []):
+                    return restore_allegro_parcels(detailed, self.allegro_orders)
+                return detailed
 
-            self.allegro_orders = list(await asyncio.gather(*(_with_details(order) for order in orders)))
+            merged = await asyncio.gather(*(_with_details(order) for order in orders))
+            self.allegro_orders = [parcel for order in merged for parcel in split_allegro_order(order)]
+            self.renamed_parcels = {
+                get_parcel_id(parcel, self.courier)
+                for old in self.data or []
+                if (parcel := get_renamed_parcel(old, self.allegro_orders))
+            }
             return self.allegro_orders
 
         elif self.courier == "orlen":
@@ -702,6 +742,10 @@ class ShipmentCoordinator(DataUpdateCoordinator):
 
             # 1. Delivery criterion: exclude delivered or terminal parcels
             if is_delivered(parcel, self.courier):
+                if self.courier != "allegro":
+                    self.delivered_tracking_numbers |= get_parcel_tracking_numbers(
+                        parcel, self.courier
+                    )
                 _LOGGER.debug(
                     "Filtered out delivered/terminal parcel %s (%s)",
                     parcel_id,
