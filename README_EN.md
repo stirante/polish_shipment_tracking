@@ -117,8 +117,9 @@ Signs in like the ORLEN Paczka app: enter your phone number, get an SMS code
 and type it in (the same as DPD). The phone number is the account id.
 
 Only **incoming** (received) parcels are shown, not ones you send. Each parcel
-has its status, pickup point (locker or point), collection code (PIN) and
-sender.
+has its status, history, pickup point (locker or point) and sender. The
+collection code (PIN) appears only once the parcel is in the locker or point;
+ORLEN sends it earlier, but it does not open anything before then.
 
 Adding an account registers Home Assistant as another device, so the phone app
 keeps working (ORLEN allows several devices).

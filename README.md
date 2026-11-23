@@ -116,8 +116,9 @@ SMS i go wpisujesz (tak samo jak w DPD). Numer telefonu jest identyfikatorem
 konta.
 
 Pokazywane są tylko przesyłki **przychodzące** (odbierane), a nie nadawane przez
-Ciebie. Dla każdej przesyłki widać status, punkt odbioru (automat lub punkt),
-kod odbioru (PIN) oraz nadawcę.
+Ciebie. Dla każdej przesyłki widać status, historię, punkt odbioru (automat lub
+punkt) oraz nadawcę. Kod odbioru (PIN) pojawia się dopiero, gdy paczka jest już
+w automacie lub punkcie; ORLEN wysyła go wcześniej, ale przedtem nic nie otwiera.
 
 Dodanie konta rejestruje Home Assistant jako kolejne urządzenie, więc aplikacja
 na telefonie działa dalej (ORLEN pozwala na wiele urządzeń).

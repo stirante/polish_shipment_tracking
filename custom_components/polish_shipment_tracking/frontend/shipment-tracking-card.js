@@ -1155,7 +1155,8 @@ class ShipmentTrackingCard extends HTMLElement {
       'dhl': 'https://upload.wikimedia.org/wikipedia/commons/a/ac/DHL_Logo.svg',
       'dpd': 'https://upload.wikimedia.org/wikipedia/commons/a/ab/DPD_logo_%282015%29.svg',
       'pocztex': 'https://www.poczta-polska.pl/wp-content/uploads/2023/04/logo-Pocztex-podstawowy.svg',
-      'gls': 'https://upload.wikimedia.org/wikipedia/commons/a/a6/GLS_Logo_2021.svg'
+      'gls': 'https://upload.wikimedia.org/wikipedia/commons/a/a6/GLS_Logo_2021.svg',
+      'orlen': 'https://www.orlenpaczka.pl/wp-content/themes/orlenpaczka/img/logo.svg'
     };
 
     for (const [key, url] of Object.entries(LOGOS)) {
@@ -1645,6 +1646,15 @@ class ShipmentTrackingCard extends HTMLElement {
                 <div class="timeline-date">${this._escapeHtml(step.hint || '')}</div>
                 <div class="timeline-title">${this._escapeHtml(step.label || '')}</div>
                 ${desc}
+              </div>`;
+          });
+        } else if (courier === 'orlen' && Array.isArray(attrs.history) && attrs.history.length) {
+          attrs.history.forEach(event => {
+            timelineHtml += `
+              <div class="timeline-item">
+                <div class="timeline-date">${this._escapeHtml(formatDateTime(event.time))}</div>
+                <div class="timeline-title">${this._escapeHtml(event.label || event.status || '')}</div>
+                ${event.comment ? `<div class="timeline-desc">${this._escapeHtml(event.comment)}</div>` : ''}
               </div>`;
           });
         } else if (courier === 'gls' && Array.isArray(raw.trackingShipmentPackages)) {

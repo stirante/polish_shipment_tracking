@@ -20,6 +20,7 @@ from .coordinator import ShipmentCoordinator
 from .helpers import (
     get_shipment_entity_id,
     get_account_label,
+    get_orlen_pickup_code,
     get_parcel_id,
     get_recipient_contacts,
     get_parcel_tracking_numbers,
@@ -626,11 +627,15 @@ class ShipmentSensor(CoordinatorEntity[ShipmentCoordinator], SensorEntity):
             attrs["history"] = history
 
     def _add_orlen_attributes(self, attrs: dict) -> None:
-        """Add ORLEN Paczka attributes (pickup point + collection PIN)."""
+        """Add ORLEN Paczka attributes (pickup point, collection PIN, history)."""
         data = self.parcel_data
+        pickup_code = get_orlen_pickup_code(data)
+        if pickup_code:
+            attrs["pickup_code"] = pickup_code
+        if data.get("events"):
+            attrs["history"] = data["events"]
         mapping = {
             "sender": "sender",
-            "pickup_code": "pickup_code",
             "pickup_point_name": "pickup_point_name",
             "location": "location",
             "statusname": "current_step",
