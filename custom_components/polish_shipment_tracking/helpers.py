@@ -462,6 +462,22 @@ def normalize_status(raw_status, courier):
 
     return "unknown"
 
+def get_counted_parcels(parcels: list[dict], courier: str, shown_ids: set[str]) -> list[dict]:
+    """Parcels the account shows as its own shipment sensors.
+
+    A parcel shared with another account (e.g. InPost "sharedTo") is in both
+    accounts' feeds but gets one sensor only, so counting the raw feeds would
+    count it twice.
+    """
+    return [
+        parcel
+        for parcel in parcels
+        if isinstance(parcel, dict)
+        and get_parcel_id(parcel, courier) in shown_ids
+        and not is_delivered(parcel, courier)
+    ]
+
+
 def count_ready_for_pickup(parcels: list[dict], courier: str) -> int:
     """Count parcels whose normalized status means they await collection."""
     return sum(
