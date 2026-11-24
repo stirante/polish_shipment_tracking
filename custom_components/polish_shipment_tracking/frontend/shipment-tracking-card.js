@@ -3,6 +3,10 @@ const CARD_TRANSLATIONS = {
     "card.title": "Shipments",
     "labels.pickup_code": "CODE",
     "labels.pickup_point": "Pickup point",
+    "labels.predicted_point": "In the point around",
+    "labels.predicted_door": "Courier around",
+    "dialog.predicted_arrival": "Predicted arrival",
+    "dialog.predicted_samples": "from {n} deliveries",
     "labels.courier_default": "Courier",
     "empty_state": "No active shipments",
     "meta.name": "Shipment Tracking Card",
@@ -104,6 +108,10 @@ const CARD_TRANSLATIONS = {
     "card.title": "Przesyłki",
     "labels.pickup_code": "KOD",
     "labels.pickup_point": "Punkt odbioru",
+    "labels.predicted_point": "W punkcie ok.",
+    "labels.predicted_door": "Kurier ok.",
+    "dialog.predicted_arrival": "Przewidywana dostawa",
+    "dialog.predicted_samples": "z {n} dostaw",
     "labels.courier_default": "Kurier",
     "empty_state": "Brak aktywnych przesyłek",
     "meta.name": "Karta śledzenia przesyłek",
@@ -741,6 +749,24 @@ class ShipmentTrackingCard extends HTMLElement {
     return this.config?.[optionName] !== false;
   }
 
+  // "13:00 (12:10-14:20)" from the integration's delivery time prediction.
+  _predictedArrival(attrs) {
+    const time = (value) => {
+      const date = new Date(value);
+      if (!value || Number.isNaN(date.getTime())) return '';
+      return date.toLocaleTimeString(this._hass?.language || 'pl', { hour: '2-digit', minute: '2-digit' });
+    };
+    const expected = time(attrs.predicted_arrival);
+    if (!expected) return null;
+    const earliest = time(attrs.predicted_arrival_earliest);
+    const latest = time(attrs.predicted_arrival_latest);
+    const range = earliest && latest && earliest !== latest ? ` (${earliest}–${latest})` : '';
+    return {
+      label: this._localize(attrs.predicted_arrival_to === 'door' ? "labels.predicted_door" : "labels.predicted_point"),
+      text: `${expected}${range}`,
+    };
+  }
+
   _closeDialog() {
     this._openDialogEntityId = null;
     this._manageAccordionOpen = false;
@@ -1272,8 +1298,15 @@ class ShipmentTrackingCard extends HTMLElement {
     if (this._isEnabled("show_dialog_pickup_code") && (attrs.pickup_code || attrs.open_code)) {
       infoHtml += `<div class="modal-info-block-row"><strong>${this._localize("dialog.pickup_code")}:</strong> <span class="val">${attrs.pickup_code || attrs.open_code}</span></div>`;
     }
+    const predicted = this._isEnabled("show_dialog_delivery_date") ? this._predictedArrival(attrs) : null;
+    if (predicted) {
+      const samples = attrs.predicted_arrival_samples
+        ? `, ${this._localize("dialog.predicted_samples").replace("{n}", attrs.predicted_arrival_samples)}`
+        : '';
+      infoHtml += `<div class="modal-info-block-row"><strong>${this._localize("dialog.predicted_arrival")}:</strong> <span class="val">${this._escapeHtml(predicted.label)} ${this._escapeHtml(predicted.text)}${this._escapeHtml(samples)}</span></div>`;
+    }
     infoHtml += this._renderAllegroInfo(attrs);
-    
+
     let timelineHtml = '';
     let manageShipmentAvailable = false;
     let dhlOptions = [];
@@ -1867,7 +1900,10 @@ class ShipmentTrackingCard extends HTMLElement {
           attrs.open_code || '',
           attrs.pickup_code || '',
           attrs.expiry_date || '',
-          attrs.stored_date || ''
+          attrs.stored_date || '',
+          attrs.predicted_arrival || '',
+          attrs.predicted_arrival_earliest || '',
+          attrs.predicted_arrival_latest || ''
       ].join('|'));
     });
 
@@ -1943,6 +1979,10 @@ class ShipmentTrackingCard extends HTMLElement {
         }
         if (this._isEnabled("show_list_location") && location) {
              extraInfoHtml += `<div class="extra-info-text">${pickupPointLabel}: ${location}</div>`;
+        }
+        const predicted = this._predictedArrival(attributes);
+        if (predicted) {
+             extraInfoHtml += `<div class="extra-info-text">${this._escapeHtml(predicted.label)} ${this._escapeHtml(predicted.text)}</div>`;
         }
         const progressBarHtml = this._renderInPostProgressBar(attributes);
         if (progressBarHtml) {

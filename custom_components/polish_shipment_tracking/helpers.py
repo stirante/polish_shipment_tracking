@@ -761,6 +761,7 @@ def merge_allegro_details(parcel: dict, details) -> dict:
 def _allegro_steps(timeline: dict) -> list[dict]:
     return [
         {
+            "type": step.get("type"),
             "label": step.get("label"),
             "hint": step.get("hint"),
             "active": bool(step.get("active")),

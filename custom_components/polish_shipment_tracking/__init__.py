@@ -8,6 +8,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.components import websocket_api
 import voluptuous as vol
 
+from . import delivery_store
 from .const import DOMAIN, PLATFORMS, INTEGRATION_VERSION
 from .frontend import JSModuleRegistration
 from .coordinator import ShipmentCoordinator
@@ -37,6 +38,8 @@ async def async_setup(hass: HomeAssistant, config: dict):
         connection.send_result(msg["id"], {"version": INTEGRATION_VERSION})
 
     websocket_api.async_register_command(hass, websocket_get_version)
+
+    await delivery_store.async_load(hass)
 
     # Schedule frontend registration based on HA state.
     if hass.state == CoreState.running:

@@ -13,7 +13,9 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_registry import async_get as async_get_entity_registry
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
+from . import delivery_store, delivery_times
 from .const import DOMAIN, INTEGRATION_VERSION, CONF_EMAIL, SIGNAL_ALLEGRO_ORDERS_UPDATED
 from .button import _build_device_info
 from .coordinator import ShipmentCoordinator
@@ -31,6 +33,14 @@ from .helpers import (
 from .helpers import count_ready_for_pickup, get_counted_parcels
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _record_home_delivery(parcel_id: str) -> None:
+    try:
+        if delivery_times.record_home_delivery(parcel_id, dt_util.now()):
+            delivery_store.async_save()
+    except Exception:  # delivery times are an experiment; never break the update
+        _LOGGER.exception("Recording the delivery time of %s failed", parcel_id)
 
 ACTIVE_SHIPMENTS_UNIQUE_ID = f"{DOMAIN}_active_shipments"
 READY_FOR_PICKUP_SHIPMENTS_UNIQUE_ID = f"{DOMAIN}_ready_for_pickup_shipments"
@@ -166,6 +176,8 @@ async def async_setup_entry(
         coordinator.pending_lifecycle_events = []
         for event_name, event_data in pending_events:
             parcel_id = event_data["shipment_id"]
+            if event_name == "shipment_status_changed" and event_data.get("new_status_key") == "delivered":
+                _record_home_delivery(parcel_id)
             entity_id = get_shipment_entity_id(
                 registry, DOMAIN, coordinator.courier, entry.entry_id, parcel_id
             )
@@ -391,7 +403,60 @@ class ShipmentSensor(CoordinatorEntity[ShipmentCoordinator], SensorEntity):
         if self._courier != "allegro":
             self._add_allegro_order_attributes(attrs)
 
+        attrs.update(self._delivery_prediction(attrs))
         return attrs
+
+    def _delivery_key(self, attrs: dict) -> str:
+        """Allegro orders and carrier accounts can show one parcel; the waybill joins them."""
+        return str(attrs.get("waybill") or self._tracking_number)
+
+    def _delivery_place(self, attrs: dict) -> str:
+        return delivery_times.delivery_place(self._courier, attrs.get("location"), attrs.get("delivery_address"))
+
+    def _track_delivery_time(self, attrs: dict, status_key: str, status_changed: bool) -> None:
+        try:
+            now = dt_util.now()
+            key = self._delivery_key(attrs)
+            place = self._delivery_place(attrs)
+            changed = False
+            if self._courier == "allegro":
+                changed = delivery_times.record_allegro_timeline(key, place, self.parcel_data.get("timeline"), now)
+            if status_changed:
+                # Allegro's timeline has the exact minute; the poll time only fills a gap.
+                changed |= delivery_times.record(
+                    key,
+                    self._courier,
+                    place,
+                    status_key,
+                    now,
+                    overwrite=self._courier != "allegro",
+                    shipment_id=self._tracking_number,
+                )
+            if changed:
+                delivery_store.async_save()
+        except Exception:  # delivery times are an experiment; never break the update
+            _LOGGER.exception("Recording the delivery time of %s failed", self._tracking_number)
+
+    def _delivery_prediction(self, attrs: dict) -> dict:
+        if attrs.get("status_key") != delivery_times.HANDED_OUT:
+            return {}
+        try:
+            place = self._delivery_place(attrs)
+            handed_out = delivery_times.handed_out_at(self._delivery_key(attrs))
+            prediction = delivery_times.predict(place, handed_out) if handed_out else None
+        except Exception:
+            _LOGGER.exception("Predicting the delivery time of %s failed", self._tracking_number)
+            return {}
+        if not prediction:
+            return {}
+        return {
+            "predicted_arrival_to": "door" if delivery_times.is_home(place) else "point",
+            "handed_out_at": handed_out.isoformat(),
+            "predicted_arrival": prediction["expected"].isoformat(),
+            "predicted_arrival_earliest": prediction["earliest"].isoformat(),
+            "predicted_arrival_latest": prediction["latest"].isoformat(),
+            "predicted_arrival_samples": prediction["samples"],
+        }
 
     def _get_account_contact(self) -> str | None:
         """Return the integration account identifier shown to the carrier."""
@@ -747,7 +812,12 @@ class ShipmentSensor(CoordinatorEntity[ShipmentCoordinator], SensorEntity):
             new_raw_status = get_raw_status(my_parcel, self._courier)
             new_status_key = normalize_status(new_raw_status, self._courier)
 
-            if old_status_key != new_status_key:
+            status_changed = old_status_key != new_status_key
+            self.parcel_data = my_parcel
+            attrs = self.extra_state_attributes
+            self._track_delivery_time(attrs, new_status_key, status_changed)
+
+            if status_changed:
                 event_data = {
                     "courier": self._courier,
                     "shipment_id": self._tracking_number,
@@ -757,12 +827,12 @@ class ShipmentSensor(CoordinatorEntity[ShipmentCoordinator], SensorEntity):
                     "new_status_raw": new_raw_status,
                     "new_status_key": new_status_key,
                 }
+                event_data.update(self._delivery_prediction(attrs))
                 _queue_or_fire_event(
                     self.coordinator.hass,
                     f"{DOMAIN}_shipment_status_changed",
                     event_data,
                 )
-            self.parcel_data = my_parcel
             self.async_write_ha_state()
         else:
             # If not found, it might be delivered or removed. 
