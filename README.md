@@ -109,6 +109,12 @@ czasu i punktem odbioru. Jeśli paczkę z zamówienia śledzi już konto kuriera
 atrybuty `allegro_items`, `allegro_seller`, `allegro_order_id` i inne, a karta
 pokazuje zamówione produkty.
 
+Gdy sprzedawca wyśle zamówienie w kilku paczkach, każda paczka jest osobnym
+sensorem (i osobnym wierszem na karcie) z nazwą zamówienia i dopiskiem `(1/2)`,
+`(2/2)`... Każda ma własny numer przesyłki, status, oś czasu i kod odbioru, i
+znika sama po odebraniu. Atrybuty `parcel_index` i `parcel_count` je rozróżniają;
+`order_id` jest wspólny.
+
 ### ORLEN Paczka
 
 Logowanie jak w aplikacji ORLEN Paczka: podajesz numer telefonu, dostajesz kod

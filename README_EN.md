@@ -111,6 +111,12 @@ parcel, no Allegro sensor is created. Instead, the carrier parcel gets
 `allegro_items`, `allegro_seller`, `allegro_order_id` and other attributes, and
 the card shows the ordered products.
 
+When the seller sends an order in several parcels, each parcel is a separate
+sensor (and a separate row on the card), named after the order with `(1/2)`,
+`(2/2)`... Each has its own waybill number, status, timeline and pickup code,
+and disappears on its own once collected. `parcel_index` and `parcel_count`
+tell the parcels apart; `order_id` is the same for all of them.
+
 ### ORLEN Paczka
 
 Signs in like the ORLEN Paczka app: enter your phone number, get an SMS code

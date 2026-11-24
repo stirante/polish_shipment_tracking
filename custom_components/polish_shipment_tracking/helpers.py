@@ -14,7 +14,8 @@ def get_parcel_id(data: dict, courier: str) -> str | None:
     if courier == "gls":
         return _pick_gls_id(data)
     if courier == "allegro":
-        return data.get("orderId")
+        # Each parcel of an order shipped in several parcels is its own shipment.
+        return data.get("parcelId") or data.get("orderId")
     if courier == "orlen":
         return data.get("barcode")
     return None
@@ -550,6 +551,16 @@ def reconcile_departed_parcels(
         if new_parcel is not None and not is_delivered(new_parcel, courier):
             continue
 
+        renamed = None
+        if new_parcel is None and courier == "allegro":
+            renamed = get_renamed_parcel(old_parcel, current)
+            if renamed is not None:
+                if normalize_status(get_raw_status(old_parcel, courier), courier) == normalize_status(
+                    get_raw_status(renamed, courier), courier
+                ):
+                    continue
+                new_parcel = renamed
+
         if new_parcel is None:
             missed = missing_counts.get(parcel_id, 0) + 1
             if missed < 2:
@@ -567,7 +578,7 @@ def reconcile_departed_parcels(
         if new_parcel is not None:
             new_raw_status = get_raw_status(new_parcel, courier)
             new_status_key = normalize_status(new_raw_status, courier)
-            if new_status_key in {"delivered", "returned", "cancelled"}:
+            if renamed is not None or new_status_key in {"delivered", "returned", "cancelled"}:
                 events.append(
                     (
                         "shipment_status_changed",
@@ -634,14 +645,16 @@ def normalize_allegro_orders(payload) -> list[dict]:
                 if not isinstance(waybill, dict) or not waybill.get("waybillId"):
                     continue
                 carrier = waybill.get("carrier") if isinstance(waybill.get("carrier"), dict) else {}
+                code = waybill.get("pickupCode") if isinstance(waybill.get("pickupCode"), dict) else {}
                 waybills.append({
                     "number": str(waybill["waybillId"]),
                     "carrier_id": carrier.get("id"),
                     "carrier_name": carrier.get("name"),
                     "url": carrier.get("url"),
+                    "pickup_code": code.get("code"),
+                    "qr_code": code.get("qrCode"),
                 })
-                code = waybill.get("pickupCode")
-                if isinstance(code, dict) and code.get("code") and not pickup_code:
+                if code.get("code") and not pickup_code:
                     pickup_code = code.get("code")
 
             raw_status = primary.get("status") or delivery.get("status")
@@ -713,27 +726,24 @@ def merge_allegro_details(parcel: dict, details) -> dict:
     }
     merged["recipient"] = {key: value for key, value in recipient.items() if value}
 
+    # One timeline per parcel: an order split into several parcels lists
+    # each waybill with its own status and steps.
     timelines = [item for item in order.get("timelines") or [] if isinstance(item, dict)]
     if timelines:
         timeline = timelines[0]
-        merged["timeline"] = [
-            {
-                "label": step.get("label"),
-                "hint": step.get("hint"),
-                "active": bool(step.get("active")),
-                "error": bool(step.get("error")),
-            }
-            for step in timeline.get("steps") or []
-            if isinstance(step, dict)
-        ]
-        estimate = [
-            detail.get("value")
-            for detail in timeline.get("details") or []
-            if isinstance(detail, dict) and detail.get("type") == "TEXT" and detail.get("value")
-        ]
+        merged["timeline"] = _allegro_steps(timeline)
+        estimate = _allegro_estimate(timeline)
         if estimate:
-            merged["deliveryEstimate"] = " ".join(estimate)
-        point = (timeline.get("pickup") or {}).get("point") if isinstance(timeline.get("pickup"), dict) else None
+            merged["deliveryEstimate"] = estimate
+        _merge_allegro_parcels(merged, timelines)
+        point = next(
+            (
+                item["pickup"]["point"]
+                for item in timelines
+                if isinstance(item.get("pickup"), dict) and isinstance(item["pickup"].get("point"), dict)
+            ),
+            None,
+        )
         if isinstance(point, dict):
             coordinates = point.get("coordinates") if isinstance(point.get("coordinates"), dict) else {}
             if coordinates.get("lat") and coordinates.get("lon"):
@@ -746,6 +756,139 @@ def merge_allegro_details(parcel: dict, details) -> dict:
             if hours:
                 merged["pickupPointHours"] = ", ".join(hours)
     return merged
+
+
+def _allegro_steps(timeline: dict) -> list[dict]:
+    return [
+        {
+            "label": step.get("label"),
+            "hint": step.get("hint"),
+            "active": bool(step.get("active")),
+            "error": bool(step.get("error")),
+        }
+        for step in timeline.get("steps") or []
+        if isinstance(step, dict)
+    ]
+
+
+def _allegro_estimate(timeline: dict) -> str | None:
+    estimate = [
+        detail.get("value")
+        for detail in timeline.get("details") or []
+        if isinstance(detail, dict) and detail.get("type") == "TEXT" and detail.get("value")
+    ]
+    return " ".join(estimate) or None
+
+
+def _merge_allegro_parcels(merged: dict, timelines: list[dict]) -> None:
+    """Give each waybill its own status and steps from the per-parcel timelines."""
+    by_number = {
+        str(item["waybillId"]): item for item in timelines if item.get("waybillId")
+    }
+    if not by_number:
+        return
+    waybills = [dict(item) for item in merged.get("waybills") or [] if isinstance(item, dict)]
+    known = {item.get("number") for item in waybills}
+    for number, timeline in by_number.items():
+        if number not in known:
+            # The order list can lag behind the details for a fresh waybill.
+            carrier = timeline.get("carrier") if isinstance(timeline.get("carrier"), dict) else {}
+            waybills.append({
+                "number": number,
+                "carrier_id": carrier.get("id"),
+                "carrier_name": carrier.get("name"),
+                "url": carrier.get("url"),
+            })
+    for waybill in waybills:
+        timeline = by_number.get(waybill.get("number"))
+        if timeline is None:
+            continue
+        waybill["status"] = timeline.get("status")
+        waybill["label"] = timeline.get("label")
+        waybill["timeline"] = _allegro_steps(timeline)
+        estimate = _allegro_estimate(timeline)
+        if estimate:
+            waybill["estimate"] = estimate
+    merged["waybills"] = waybills
+
+
+def split_allegro_order(order: dict) -> list[dict]:
+    """One shipment per parcel when the seller sends an order in several parcels.
+
+    Each parcel keeps the order details (products, seller, recipient) but has
+    its own number, status, timeline and pickup code. The waybill number is
+    the parcel id, so a single-parcel order keeps its order id.
+    """
+    waybills = [item for item in order.get("waybills") or [] if isinstance(item, dict) and item.get("number")]
+    if len(waybills) < 2:
+        return [order]
+    cancelled = order.get("status") == "ORDER_CANCELLED"
+    parcels = []
+    for index, waybill in enumerate(waybills, start=1):
+        parcel = dict(order)
+        parcel["parcelId"] = waybill["number"]
+        parcel["parcelIndex"] = index
+        parcel["parcelCount"] = len(waybills)
+        parcel["waybills"] = [waybill]
+        parcel["pickupCode"] = waybill.get("pickup_code")
+        # Without the per-parcel timeline (details failed) the order status
+        # is the best guess for every parcel.
+        if waybill.get("status") and not cancelled:
+            parcel["status"] = waybill["status"]
+            parcel["statusLabel"] = waybill.get("label") or order.get("statusLabel")
+        if waybill.get("timeline"):
+            parcel["timeline"] = waybill["timeline"]
+        if waybill.get("estimate"):
+            parcel["deliveryEstimate"] = waybill["estimate"]
+        parcels.append(parcel)
+    return parcels
+
+
+def restore_allegro_parcels(order: dict, previous: list[dict]) -> dict:
+    """Fill in per-parcel data from the last poll when the details are missing.
+
+    Without it every parcel would take the order status: one still under way
+    would look delivered, or one already collected would come back as new.
+    """
+    if order.get("status") == "ORDER_CANCELLED":
+        return order
+    last = {
+        waybill["number"]: waybill
+        for parcel in previous
+        if parcel.get("parcelId") and parcel.get("orderId") == order.get("orderId")
+        for waybill in parcel.get("waybills") or []
+    }
+    if not last:
+        return order
+    fresh = {waybill["number"]: waybill for waybill in order.get("waybills") or []}
+    waybills = [
+        {**waybill, **{key: value for key, value in fresh.get(number, {}).items() if value is not None}}
+        for number, waybill in last.items()
+    ]
+    waybills += [waybill for number, waybill in fresh.items() if number not in last]
+    return {**order, "waybills": waybills}
+
+
+def get_renamed_parcel(old: dict, current: list[dict]) -> dict | None:
+    """The same parcel under its new id, when its order split or stopped being split."""
+    order_id = old.get("orderId")
+    old_id = get_parcel_id(old, "allegro")
+    if not order_id:
+        return None
+    parcels = [item for item in current if isinstance(item, dict) and item.get("orderId") == order_id]
+    ids = {get_parcel_id(item, "allegro") for item in parcels}
+    if not parcels or old_id in ids or (old_id != order_id and order_id not in ids):
+        return None
+    numbers = get_parcel_tracking_numbers(old, "allegro")
+    for parcel in parcels:
+        if numbers & get_parcel_tracking_numbers(parcel, "allegro"):
+            return parcel
+    # An order announced before it had this waybill becomes its first parcel.
+    return parcels[0] if old_id == order_id else None
+
+
+def get_allegro_parcel_count(parcel: dict) -> int:
+    return len([item for item in parcel.get("waybills") or [] if isinstance(item, dict)])
 
 
 def get_account_label(entry_data: dict) -> str | None:
@@ -767,7 +910,8 @@ def get_parcel_tracking_numbers(parcel: dict, courier: str) -> set[str]:
     """Every tracking number a parcel is known under, normalized.
 
     Carriers expose a few aliases (GLS shipmentNo/trackingId, Pocztex
-    consignment number), and Allegro may reference any of them.
+    consignment number, DPD's Allegro display waybill), and Allegro may
+    reference any of them.
     """
     if not isinstance(parcel, dict):
         return set()
@@ -786,6 +930,9 @@ def get_parcel_tracking_numbers(parcel: dict, courier: str) -> set[str]:
                 "trackingNumber",
                 "consignmentNumber",
                 "waybill",
+                # DPD lists Allegro Delivery parcels under their own waybill
+                # and keeps Allegro's "AD..." number here.
+                "display_waybill",
                 "parcelNumber",
             ):
                 if isinstance(source.get(key), (str, int)):
@@ -900,6 +1047,9 @@ def is_hidden_shipment(parcel: dict, courier: str, hidden: set[str]) -> bool:
     parcel_id = normalize_tracking_number(get_parcel_id(parcel, courier))
     if parcel_id:
         numbers.add(parcel_id)
+    # An order hidden as a whole stays hidden once it is shown per parcel.
+    if courier == "allegro" and parcel.get("orderId"):
+        numbers.add(normalize_tracking_number(parcel["orderId"]))
     return bool(numbers & hidden)
 
 
