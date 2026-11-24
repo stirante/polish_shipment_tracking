@@ -14,12 +14,16 @@ Reverse-engineered from the app; endpoints verified against the live gateway.
 """
 from __future__ import annotations
 
+import asyncio
 import base64
+import logging
 import time
 
 import aiohttp
 
 from .api_helpers import normalize_phone, request_json
+
+_LOGGER = logging.getLogger(__name__)
 
 # Azure AD app credentials embedded in the ORLEN Paczka app (same for every
 # install). Used only to obtain the gateway token the app itself uses.
@@ -109,15 +113,38 @@ class OrlenApi:
         kept, since the integration tracks incoming parcels.
         """
         data = await self._request("GET", f"customers/{self._phone}/{self._device_id}/shipments")
-        parcels = []
+        incoming = []
         for p in _unwrap(data):
             if not isinstance(p, dict):
                 continue
             receiver_phone = normalize_phone((p.get("receiver") or {}).get("phone") or "")
             if receiver_phone != normalize_phone(self._phone or ""):
                 continue  # outgoing parcel sent by this account
-            parcels.append(self._normalize(p))
-        return parcels
+            incoming.append(p)
+        # The list leaves "events" empty; only the per-shipment call has the
+        # history. Archived parcels are dropped anyway, so skip their details.
+        semaphore = asyncio.Semaphore(5)
+
+        async def _with_events(p: dict) -> dict:
+            if p.get("archiveshipment") or not p.get("id"):
+                return p
+            try:
+                async with semaphore:
+                    details = await self.get_shipment_details(p["id"])
+            except Exception as err:  # history is a nice-to-have
+                _LOGGER.debug("ORLEN shipment details failed for %s: %s", p.get("barcode"), err)
+                return p
+            return details if isinstance(details, dict) and details.get("barcode") == p.get("barcode") else p
+
+        return [self._normalize(p) for p in await asyncio.gather(*(_with_events(p) for p in incoming))]
+
+    async def get_shipment_details(self, shipment_id) -> dict | None:
+        """Full shipment record, with its event history, by the numeric id."""
+        data = await self._request(
+            "GET", f"customers/{self._phone}/{self._device_id}/shipments/{shipment_id}"
+        )
+        items = _unwrap(data)
+        return items[0] if items and isinstance(items[0], dict) else None
 
     async def get_parcel(self, barcode: str) -> dict | None:
         """Return one parcel by barcode (ORLEN has no single-parcel endpoint)."""
@@ -148,8 +175,24 @@ class OrlenApi:
             "location": location or None,
             "proposed_delivery_date": p.get("proposedDeliveryDate"),
             "archived": bool(p.get("archiveshipment")),
+            "events": _events(p.get("events")),
             "_raw_response": p,
         }
+
+
+def _events(events) -> list:
+    """Event history, newest first (ORLEN times are Polish local time)."""
+    items = [
+        {
+            "time": event.get("time"),
+            "status": event.get("typeid"),
+            "label": event.get("typename"),
+            "comment": event.get("comments") or None,
+        }
+        for event in events or []
+        if isinstance(event, dict) and (event.get("typename") or event.get("typeid"))
+    ]
+    return sorted(items, key=lambda event: str(event["time"] or ""), reverse=True)
 
 
 def _unwrap(data) -> list:

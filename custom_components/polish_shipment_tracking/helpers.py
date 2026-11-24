@@ -487,6 +487,17 @@ def count_ready_for_pickup(parcels: list[dict], courier: str) -> int:
     )
 
 
+def get_orlen_pickup_code(parcel: dict) -> str | None:
+    """The collection PIN, once the parcel is in the box.
+
+    ORLEN hands the PIN out as soon as the parcel is created, but it only
+    opens the box after the courier has put the parcel in it.
+    """
+    if normalize_status(get_raw_status(parcel, "orlen"), "orlen") != "waiting_for_pickup":
+        return None
+    return parcel.get("pickup_code") or None
+
+
 def is_delivered(data: dict, courier: str) -> bool:
     """Check if parcel is delivered or in a terminal state."""
     if not isinstance(data, dict):
