@@ -89,6 +89,105 @@ class GlsParcelListTests(unittest.TestCase):
         )
 
 
+class FakeResponse:
+    def __init__(self, status, text):
+        self.status = status
+        self._text = text
+
+    async def text(self):
+        return self._text
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+class FakeSession:
+    """Answers like GLS: only registered session ids may read the parcel list."""
+
+    def __init__(self, known_sessions, list_status=200):
+        self.known = set(known_sessions)
+        self.list_status = list_status
+        self.calls = []
+
+    def request(self, method, url, headers, json):
+        session_id = headers["SessionId"]
+        self.calls.append((method, url.rsplit("/", 1)[-1].split("?")[0], session_id))
+        if url.endswith("/user/session"):
+            self.known.add(json["sessionId"])
+            return FakeResponse(200, "")
+        if session_id not in self.known:
+            return FakeResponse(500, "404 page not found\n")
+        if self.list_status != 200:
+            return FakeResponse(self.list_status, "boom")
+        return FakeResponse(200, '{"content": []}')
+
+
+def _api(session, session_id="old"):
+    api = _load_api_gls().GlsApi(session=session, session_id=session_id)
+    api._token = "token"
+    api._expires_at = 2**31
+    api._session_registered = session_id
+    return api
+
+
+class GlsSessionTests(unittest.TestCase):
+    def test_dropped_session_is_replaced_and_the_request_retried(self):
+        session = FakeSession(known_sessions=[])
+        api = _api(session)
+
+        with self.assertLogs(level="INFO"):
+            self.assertEqual(asyncio.run(api.get_parcels()), {"content": []})
+
+        new_id = api.export_auth_data()["session_id"]
+        self.assertNotEqual(new_id, "old")
+        self.assertEqual(api.export_auth_data()["session_registered"], new_id)
+        self.assertEqual(
+            session.calls,
+            [("GET", "paged", "old"), ("POST", "session", new_id), ("GET", "paged", new_id)],
+        )
+
+    def test_known_session_is_kept(self):
+        session = FakeSession(known_sessions=["old"])
+        api = _api(session)
+
+        asyncio.run(api.get_parcels())
+
+        self.assertEqual(api.export_auth_data()["session_id"], "old")
+        self.assertEqual(session.calls, [("GET", "paged", "old")])
+
+    def test_other_errors_do_not_replace_the_session(self):
+        session = FakeSession(known_sessions=["old"], list_status=500)
+        api = _api(session)
+
+        with self.assertRaisesRegex(Exception, "GLS API Error: 500 - boom"):
+            asyncio.run(api.get_parcels())
+
+        self.assertEqual(api.export_auth_data()["session_id"], "old")
+        self.assertEqual(len(session.calls), 1)
+
+    def test_gives_up_when_a_new_session_does_not_help(self):
+        session = FakeSession(known_sessions=[])
+        session.request_session = session.request
+
+        def never_registers(method, url, headers, json):
+            if url.endswith("/user/session"):
+                session.calls.append((method, "session", headers["SessionId"]))
+                return FakeResponse(200, "")
+            return session.request_session(method, url, headers, json)
+
+        session.request = never_registers
+        api = _api(session)
+
+        with self.assertLogs(level="INFO"):
+            with self.assertRaisesRegex(Exception, "404 page not found"):
+                asyncio.run(api.get_parcels())
+
+        self.assertEqual([call[1] for call in session.calls], ["paged", "session", "paged"])
+
+
 class TokenPersistenceTests(unittest.TestCase):
     def test_failed_fetch_saves_a_refreshed_token(self):
         update_data = _load_update_data()

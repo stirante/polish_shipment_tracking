@@ -6,12 +6,19 @@ import hashlib
 import hmac
 import asyncio
 import json
+import logging
 import secrets
 import time
 import uuid
 from urllib.parse import quote, urlencode, urljoin
 
 import aiohttp
+
+_LOGGER = logging.getLogger(__name__)
+
+
+class GlsSessionLost(Exception):
+    """GLS no longer accepts the registered SessionId."""
 
 
 class GlsApi:
@@ -165,7 +172,20 @@ class GlsApi:
         json_data=None,
         ensure_session: bool = True,
     ):
-        """Perform a signed myGLS API request."""
+        """Perform a signed myGLS API request, with a new session if GLS dropped ours."""
+        session_id = self._session_id
+        try:
+            return await self._send(method, url, json_data, ensure_session)
+        except GlsSessionLost:
+            if not ensure_session:
+                raise
+            if self._session_id == session_id:
+                _LOGGER.info("GLS dropped session %s, registering a new one", session_id)
+                self._session_id = str(uuid.uuid4())
+                self._session_registered = None
+            return await self._send(method, url, json_data, ensure_session)
+
+    async def _send(self, method: str, url: str, json_data, ensure_session: bool):
         await self._refresh_if_needed()
         if ensure_session:
             await self.ensure_session()
@@ -184,6 +204,10 @@ class GlsApi:
             async with self._session.request(method, url, headers=headers, json=json_data) as resp:
                 text = await resp.text()
                 body = _try_json(text)
+                if resp.status == 500 and text.strip() == "404 page not found":
+                    # What GLS answers for a session it no longer knows (for
+                    # example after the app logged the account in again).
+                    raise GlsSessionLost(f"GLS API Error: {resp.status} - {text}")
                 if resp.status >= 400:
                     raise Exception(f"GLS API Error: {resp.status} - {text}")
                 return body
