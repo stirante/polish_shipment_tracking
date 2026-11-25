@@ -20,6 +20,7 @@ from .coordinator import ShipmentCoordinator
 from .helpers import (
     get_shipment_entity_id,
     get_account_label,
+    get_inpost_multicompartment,
     get_orlen_pickup_code,
     get_parcel_id,
     get_recipient_contacts,
@@ -431,6 +432,18 @@ class ShipmentSensor(CoordinatorEntity[ShipmentCoordinator], SensorEntity):
         stored_date = self.parcel_data.get("storedDate") or self.parcel_data.get("stored_date")
         if stored_date is not None:
             attrs["stored_date"] = stored_date
+
+        parcel_size = self.parcel_data.get("parcelSize")
+        if parcel_size:
+            attrs["parcel_size"] = parcel_size
+
+        mc = get_inpost_multicompartment(self.parcel_data)
+        if mc is not None:
+            attrs["is_multi_compartment"] = True
+            attrs["multi_compartment_uuid"] = mc["uuid"]
+            attrs["multi_compartment_presentation"] = mc["presentation"]
+            if mc["shipment_numbers"]:
+                attrs["multi_compartment_shipments"] = mc["shipment_numbers"]
 
     def _add_dpd_attributes(self, attrs: dict) -> None:
         """Add DPD specific attributes."""

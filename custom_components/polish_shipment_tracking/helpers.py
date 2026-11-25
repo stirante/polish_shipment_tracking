@@ -499,6 +499,31 @@ def get_orlen_pickup_code(parcel: dict) -> str | None:
     return parcel.get("pickup_code") or None
 
 
+def get_inpost_multicompartment(parcel: dict) -> dict | None:
+    """Return normalized InPost multi-compartment metadata when active."""
+    if not isinstance(parcel, dict):
+        return None
+    mc = parcel.get("multiCompartment")
+    if not isinstance(mc, dict):
+        return None
+    if mc.get("collected") is True:
+        return None
+    uuid = str(mc.get("uuid") or "").strip()
+    if not uuid:
+        return None
+    raw_numbers = mc.get("shipmentNumbers")
+    shipment_numbers = (
+        [str(num).strip() for num in raw_numbers if num is not None and str(num).strip()]
+        if isinstance(raw_numbers, list)
+        else []
+    )
+    return {
+        "uuid": uuid,
+        "presentation": bool(mc.get("presentation", False)),
+        "shipment_numbers": shipment_numbers,
+    }
+
+
 def is_delivered(data: dict, courier: str) -> bool:
     """Check if parcel is delivered or in a terminal state."""
     if not isinstance(data, dict):
