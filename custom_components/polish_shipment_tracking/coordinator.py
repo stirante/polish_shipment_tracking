@@ -201,6 +201,10 @@ class ShipmentCoordinator(DataUpdateCoordinator):
         self.pending_lifecycle_events: list[tuple[str, dict]] = []
         self._missing_parcel_counts: dict[str, int] = {}
         self.add_entities_callback = None
+        # The entry as this coordinator was set up with it, plus the tokens it
+        # saved itself since, so saving a token does not reload the entry.
+        self._own_data = dict(entry.data)
+        self._own_options = dict(entry.options)
         # Per-account session owned by this coordinator (DHL/GLS). Their auth is
         # cookie-based, so accounts must NOT share HA's global cookie jar or one
         # account's access-token cookie bleeds into the other's requests.
@@ -906,7 +910,7 @@ class ShipmentCoordinator(DataUpdateCoordinator):
         else:
             return
 
-        self.hass.config_entries.async_update_entry(self.entry, data=new_data)
+        self._save_auth(new_data)
 
     def _persist_auth_if_changed(self):
         """Persist token changes made by proactive in-request refreshes.
@@ -944,4 +948,17 @@ class ShipmentCoordinator(DataUpdateCoordinator):
             return
 
         if new_data != self.entry.data:
-            self.hass.config_entries.async_update_entry(self.entry, data=new_data)
+            self._save_auth(new_data)
+
+    def _save_auth(self, new_data: dict) -> None:
+        """Store refreshed tokens in the config entry without a reload.
+
+        The api already uses the new tokens. A reload would close the DHL/GLS
+        session while the request retried after the refresh is still running.
+        """
+        self._own_data = dict(new_data)
+        self.hass.config_entries.async_update_entry(self.entry, data=new_data)
+
+    def entry_changed_since_setup(self) -> bool:
+        """True when the entry changed in a way only a reload applies."""
+        return self.entry.data != self._own_data or self.entry.options != self._own_options
