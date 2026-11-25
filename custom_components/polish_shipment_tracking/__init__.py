@@ -70,6 +70,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 
 async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Reload so new recipient filters (or a new Allegro cookie) apply."""
+    coordinator = hass.data[DOMAIN].get(entry.entry_id)
+    if coordinator is not None and not coordinator.entry_changed_since_setup():
+        # Only tokens the coordinator saved itself changed.
+        return
     await hass.config_entries.async_reload(entry.entry_id)
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):

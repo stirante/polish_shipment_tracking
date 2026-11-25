@@ -15,7 +15,7 @@ COMPONENT = Path(__file__).resolve().parents[1] / "custom_components" / "polish_
 
 
 def _load_api_gls():
-    if importlib.util.find_spec("aiohttp") is None:
+    if "aiohttp" not in sys.modules and importlib.util.find_spec("aiohttp") is None:
         sys.modules.setdefault("aiohttp", types.ModuleType("aiohttp"))
     spec = importlib.util.spec_from_file_location("gls_api_gls", COMPONENT / "api_gls.py")
     module = importlib.util.module_from_spec(spec)

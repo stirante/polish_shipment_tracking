@@ -24,19 +24,19 @@ def _load_api_orlen():
     # Load the module alone: Home Assistant and async_timeout are not
     # installed in this repository's lightweight test environment.
     sys.modules.setdefault("async_timeout", types.ModuleType("async_timeout"))
+    if "aiohttp" not in sys.modules and importlib.util.find_spec("aiohttp") is None:
+        aiohttp = types.ModuleType("aiohttp")
+        aiohttp.ClientSession = object
+        aiohttp.ClientTimeout = lambda **kwargs: None
+        sys.modules["aiohttp"] = aiohttp
+    # api_helpers imports aiohttp, so it loads only after the stub is in place.
     api_helpers = runpy.run_path(str(PACKAGE_DIR / "api_helpers.py"))
     package = types.ModuleType("orlen_pkg")
     package.__path__ = []
     helpers = types.ModuleType("orlen_pkg.api_helpers")
     helpers.request_json = None
     helpers.normalize_phone = api_helpers["normalize_phone"]
-    stubs = {"orlen_pkg": package, "orlen_pkg.api_helpers": helpers}
-    if importlib.util.find_spec("aiohttp") is None:
-        aiohttp = types.ModuleType("aiohttp")
-        aiohttp.ClientSession = object
-        aiohttp.ClientTimeout = lambda **kwargs: None
-        stubs["aiohttp"] = aiohttp
-    for name, module in stubs.items():
+    for name, module in {"orlen_pkg": package, "orlen_pkg.api_helpers": helpers}.items():
         sys.modules.setdefault(name, module)
     spec = importlib.util.spec_from_file_location(
         "orlen_pkg.api_orlen", PACKAGE_DIR / "api_orlen.py"
