@@ -5,7 +5,7 @@ import json
 import logging
 from homeassistant import config_entries
 from homeassistant.core import callback
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.aiohttp_client import async_create_clientsession, async_get_clientsession
 from homeassistant.helpers.selector import TextSelector, TextSelectorConfig
 
 from .const import (
@@ -110,7 +110,11 @@ class ShipmentTrackingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
                 elif self.courier == "dhl":
                     from .api_dhl import DhlApi
-                    self.api_instance = DhlApi(session)
+                    # DhlApi carries its own cookies. HA's shared cookie jar
+                    # would add another account's access-token to this login.
+                    self.api_instance = DhlApi(
+                        async_create_clientsession(self.hass, cookie_jar=aiohttp.DummyCookieJar())
+                    )
                     await self.api_instance.generate_code(self.phone)
 
                 return await self.async_step_sms()
@@ -384,8 +388,7 @@ class ShipmentTrackingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     }
                 
                 elif self.courier == "dhl":
-                    from .api_dhl import DhlApi
-                    api = DhlApi(session)
+                    api = self.api_instance
                     await api.validate_code(self.phone, code, self.device_uid)
 
                     # Persist cookies so they survive restarts.
