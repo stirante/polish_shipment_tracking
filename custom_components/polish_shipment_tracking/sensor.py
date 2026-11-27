@@ -436,7 +436,7 @@ class ShipmentSensor(CoordinatorEntity[ShipmentCoordinator], SensorEntity):
         """Add DPD specific attributes."""
         sender = self.parcel_data.get("sender")
         if isinstance(sender, dict):
-            attrs["sender"] = sender.get("name")
+            attrs["sender"] = _dpd_sender_label(sender)
 
         # When the parcel is delivered to a pickup point (PUDO), expose the
         # point details so they show up in the list and dialog like InPost.
@@ -768,6 +768,19 @@ class ShipmentSensor(CoordinatorEntity[ShipmentCoordinator], SensorEntity):
             # If not found, it might be delivered or removed. 
             # The async_update_parcels listener will handle removal.
             pass
+
+
+def _dpd_sender_label(sender: dict) -> str:
+    """Return the DPD sender as "Company (Name)", or whichever one is set.
+
+    Business senders fill in the company and often leave the name empty.
+    """
+    name = (sender.get("name") or "").strip()
+    company = (sender.get("company") or "").strip()
+    if company and name and name.casefold() != company.casefold():
+        return f"{company} ({name})"
+    return company or name
+
 
 def _set_allegro_order_attrs(attrs: dict, order: dict, prefix: str) -> None:
     """Order details shared by Allegro sensors and carrier parcels they link to."""
